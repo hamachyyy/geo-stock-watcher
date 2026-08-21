@@ -1,0 +1,5 @@
+# 通知先トピックはリポジトリに入れない（GitHub Actions では Secrets を使う）
+config.local.json
+logs/
+*.tmp
+.DS_Store

@@ -1,0 +1,39 @@
+name: 在庫チェック
+
+on:
+  schedule:
+    # 5 分ごと。GitHub 側の混雑で 10〜30 分遅れることがある。
+    - cron: '*/5 * * * *'
+  workflow_dispatch:      # 手動実行用
+
+permissions:
+  contents: write         # state.json を書き戻すため
+
+concurrency:
+  # 前の実行が終わる前に次が始まって状態が壊れるのを防ぐ
+  group: stock-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 在庫を確認して変化があれば通知
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python3 watcher.py --once --durable-state
+
+      - name: 在庫状態が変わっていれば記録を残す
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          if git diff --staged --quiet; then
+            echo "在庫状態に変化なし。コミットしません。"
+          else
+            git commit -m "在庫状態を更新: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          fi

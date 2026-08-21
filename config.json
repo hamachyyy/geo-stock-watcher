@@ -1,0 +1,23 @@
+{
+  "ntfy": {
+    "server": "https://ntfy.sh",
+    "topic": "",
+    "token": ""
+  },
+  "targets": [
+    {
+      "name": "iPhone XR (SIMフリー)",
+      "url": "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneXR_simfree",
+      "title_contains": "iPhone XR"
+    },
+    {
+      "name": "iPhone SE2 (SIMフリー)",
+      "url": "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree",
+      "title_contains": "iPhone SE 第2世代"
+    }
+  ],
+  "renotify_hours": 6,
+  "health_alert_after_errors": 6,
+  "health_alert_cooldown_hours": 12,
+  "mac_fallback_notification": true
+}

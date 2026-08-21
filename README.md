@@ -1,0 +1,215 @@
+# ゲオモバイル 在庫復活ウォッチャー
+
+ゲオモバイル（UQ mobile 代理店）の端末ページを見張り、**在庫切れ → 在庫あり** に変わった
+瞬間にスマホへプッシュ通知を送ります。
+
+監視対象（初期設定）
+
+| 機種 | ページ |
+|---|---|
+| iPhone XR (SIMフリー) | https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneXR_simfree |
+| iPhone SE2 (SIMフリー) | https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree |
+
+監視は 2 系統あります。
+
+| 実行場所 | 間隔 | 動く条件 |
+|---|---|---|
+| GitHub Actions | 5 分ごと（混雑時 10〜30 分遅延あり） | 常時。**これが本命** |
+| 手元の Mac (launchd) | 5 分ごと（遅延なし） | Mac が起動しログイン中のときだけ |
+
+両方動かしておくと、Mac を開いている間は速く、閉じている間も取りこぼしません。
+そのぶん在庫復活時に**通知が 2 通届きます**（それぞれ独立に状態を持っているため）。
+1 通で良ければ Mac 側を止めてください → `./uninstall.sh`
+
+---
+
+## 通知先（ntfy）
+
+スマホに **ntfy** アプリ（App Store / Google Play・無料・登録不要）を入れ、
+自分のトピック名を購読します。トピック名は URL を知っていれば誰でも読めるため、
+**リポジトリには一切含めていません。**
+
+- ローカル実行時 … `config.local.json`（`.gitignore` 済み）から読む
+- GitHub Actions 実行時 … リポジトリ Secrets の `NTFY_TOPIC` から読む
+
+自分のトピック名を確認する：
+
+```bash
+/usr/bin/python3 -c "import json;print(json.load(open('/Users/mori/XCODE/GeoStockWatcher/config.local.json'))['ntfy']['topic'])"
+```
+
+届くかテストする：
+
+```bash
+/usr/bin/python3 /Users/mori/XCODE/GeoStockWatcher/watcher.py --test-notify
+```
+
+---
+
+## GitHub Actions で 24 時間動かす
+
+**パブリックリポジトリなら実行時間は無料無制限**です。プライベートだと無料枠
+2,000 分/月に対し 5 分間隔では約 8,600 分/月かかり、まったく足りません。
+トピック名は Secrets に入るのでパブリックでも漏れません。
+
+```bash
+brew install gh
+gh auth login
+```
+
+```bash
+cd /Users/mori/XCODE/GeoStockWatcher && gh repo create geo-stock-watcher --public --source=. --push
+```
+
+```bash
+cd /Users/mori/XCODE/GeoStockWatcher && gh secret set NTFY_TOPIC --body "$(/usr/bin/python3 -c "import json;print(json.load(open('config.local.json'))['ntfy']['topic'])")"
+```
+
+登録できたら手動で 1 回動かして、通知が届くか確認します。
+
+```bash
+cd /Users/mori/XCODE/GeoStockWatcher && gh workflow run watch.yml && sleep 45 && gh run list --limit 3
+```
+
+以降は 5 分ごとに自動実行されます。実行状況は次で見られます。
+
+```bash
+cd /Users/mori/XCODE/GeoStockWatcher && gh run list --limit 10
+```
+
+### GitHub Actions 側の注意
+
+- **定期実行は遅れます。** `*/5` と書いても混雑時は 10〜30 分後になることがあり、
+  まれにスキップされます。分単位の正確さが要る場合は Google Cloud Run + Cloud Scheduler
+  など別の実行場所が必要です。
+- **60 日間リポジトリに動きがないと定期実行が自動停止します**（GitHub の仕様）。
+  停止前に警告メールが届くので、その際は何かコミットするか、Actions 画面で再有効化します。
+- 在庫状態が変わったときだけ `state.json` がコミットされます。変化がない限りコミットは
+  発生しません（毎回コミットされると履歴が 5 分ごとに埋まるため、最終チェック時刻は
+  `--durable-state` で保存対象から外しています）。
+
+---
+
+## 手元の Mac で動かす（任意）
+
+```bash
+cd /Users/mori/XCODE/GeoStockWatcher && ./install.sh
+```
+
+| コマンド | 動作 |
+|---|---|
+| `watcher.py --status` | いまの在庫状態と最終チェック時刻を表示 |
+| `watcher.py --once` | 手動で 1 回チェック |
+| `watcher.py --test-notify` | テスト通知を送る |
+| `watcher.py --force-notify` | 在庫ありなら再通知間隔を無視して通知 |
+| `watcher.py --reset` | 保存済みの状態を消す |
+| `./install.sh [秒]` | 自動チェックを登録（既定 300 秒＝5分）|
+| `./uninstall.sh` | 自動チェックを停止 |
+
+---
+
+## 仕組み
+
+### 在庫判定
+
+このサイトは在庫切れのときだけ、商品ページに次のセクションを出力します。
+
+```html
+<section id="js-soldout">
+  <div class="sold_title">在庫切れ</div>
+  ...
+</section>
+```
+
+在庫があるページにはこの要素がありません。JavaScript 実行前の HTML に含まれるため、
+ブラウザを起動せずに判定できます。
+
+### 誤通知を防ぐ仕掛け
+
+「`js-soldout` が無い＝在庫あり」は、取得に失敗したときにも成立してしまいます。
+そのため在庫ありと判定する前に、次をすべて確認します。
+
+1. 応答が 5,000 バイト以上ある
+2. `</html>` まで届いている（途中で切れていない）
+3. 在庫の有無に関わらず存在する構造アンカー `id="js-bottom_section"` がある
+4. `<title>` に対象機種名が入っている（別ページへの転送でないこと）
+
+どれか一つでも欠ければ「判定不能」として扱い、通知は送りません。
+判定不能や取得失敗が **6 回連続**続いた場合だけ、「監視が止まっている可能性」という
+警告通知を送ります。サイト改修で静かに壊れて見逃す事故を防ぐためです。
+
+### 取得方法（重要）
+
+サイトは Akamai のボット判定を入れています。実測した結果はこうです。
+
+| リクエスト | 結果 |
+|---|---|
+| HTTP/2 ＋ Chrome 相当のヘッダ一式 | **200** |
+| HTTP/2 ＋ User-Agent だけ | 403 |
+| HTTP/1.1 ＋ Chrome 相当のヘッダ一式 | 403 |
+| HTTP/1.1 ＋ Firefox UA | 403 |
+| Python `urllib`（ヘッダを揃えても HTTP/1.1）| 403 |
+
+つまり **HTTP/2 とヘッダ構成の両方が必要**です。この条件を満たせるのが
+`curl --http2` なので、取得部分は `curl` に委譲しています。
+
+この制約のため、実行場所は**送信するHTTPの中身を自分で決められる環境**に限られます。
+GitHub Actions は Ubuntu の VM 上で `curl` をそのまま実行できるので問題ありません。
+Cloudflare Workers / Deno Deploy のようなエッジ環境や Node.js の `fetch`（undici）は
+HTTP/1.1 になったりヘッダが正規化されたりするため、403 になる可能性が高く採用していません。
+
+`watcher.py` の `BROWSER_HEADERS` は動作確認済みの組み合わせです。むやみに削らないでください。
+
+### 通知
+
+ntfy.sh へ POST します。優先度は `urgent`、通知をタップすると商品ページが開きます。
+日本語タイトルは ntfy のヘッダが ASCII のみのため RFC 2047 で符号化しています。
+ntfy への送信が 3 回失敗した場合のみ、保険として Mac のローカル通知に切り替えます
+（`config.json` の `mac_fallback_notification` で無効化可）。
+
+---
+
+## 設定
+
+`config.json`（リポジトリに入る）と `config.local.json`（入らない）と環境変数を、
+この順に重ねて読みます。後のものが勝ちます。
+
+| キー | 既定値 | 意味 |
+|---|---|---|
+| `ntfy.topic` | 空（別管理） | 購読するトピック名。環境変数 `NTFY_TOPIC` が優先 |
+| `ntfy.server` | `https://ntfy.sh` | セルフホストする場合に変更 |
+| `ntfy.token` | 空 | 認証付きサーバーを使う場合のみ |
+| `targets` | XR / SE2 | 監視対象。`name` / `url` / `title_contains` |
+| `renotify_hours` | 6 | 在庫ありが続く間、何時間おきに再通知するか |
+| `health_alert_after_errors` | 6 | 何回連続で判定不能なら警告を出すか |
+| `health_alert_cooldown_hours` | 12 | 警告通知の最短間隔 |
+| `mac_fallback_notification` | true | ntfy 失敗時に Mac 通知へ切り替えるか |
+
+**監視対象を増やす**には `config.json` の `targets` に追記します。同じサイトの商品ページ
+なら何でも動きます。
+
+```json
+{
+  "name": "iPhone 12 mini (SIMフリー)",
+  "url": "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhone12mini_simfree",
+  "title_contains": "iPhone 12 mini"
+}
+```
+
+`title_contains` はページの `<title>` に含まれる文字列です（例：`iPhone SE 第2世代`）。
+省略しても動きますが、入れておくと転送時の誤判定を防げます。
+
+---
+
+## ファイル構成
+
+```
+GeoStockWatcher/
+├── watcher.py                    本体
+├── config.json                   設定（公開される・トピックは空）
+├── config.local.json             トピック名（git 管理外）
+├── state.json                    前回の在庫状態
+├── install.sh / uninstall.sh     Mac 常駐の登録・解除
+├── .github/workflows/watch.yml   GitHub Actions の定期実行
+└── logs/                         実行ログ（git 管理外）
+```
