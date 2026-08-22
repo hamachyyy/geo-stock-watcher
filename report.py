@@ -10,6 +10,7 @@ import html
 import json
 import os
 import re
+import subprocess
 from datetime import datetime
 
 TS_FMT = "%Y-%m-%d %H:%M:%S"
@@ -38,14 +39,99 @@ def _fmt_dur(seconds):
     return "%d秒" % seconds
 
 
+def _git(args, cwd, timeout=25):
+    """git を実行して標準出力を返す。失敗したら None。"""
+    try:
+        r = subprocess.run(["git"] + args, cwd=cwd, capture_output=True,
+                           timeout=timeout)
+        if r.returncode != 0:
+            return None
+        return r.stdout.decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def load_ci_history(base_dir, fetch=True):
+    """GitHub Actions が書き戻した state.json のコミット履歴から遷移を復元する。
+
+    CI は在庫状態が変わったときだけ state.json をコミットする。各版に入っている
+    (機種, 状態, その状態になった時刻) の組を拾えば、Mac が寝ていた間に CI が
+    捉えた変化も履歴に混ぜられる。
+    """
+    if not os.path.isdir(os.path.join(base_dir, ".git")):
+        return []
+    if fetch:
+        # CI のコミットは手元に無いので取ってくる。オフラインでも落ちないよう戻り値は見ない。
+        _git(["fetch", "--quiet", "origin", "main"], base_dir, timeout=25)
+    ref = "origin/main" if _git(["rev-parse", "--verify", "--quiet",
+                                 "origin/main"], base_dir) else "HEAD"
+    out = _git(["log", "--format=%H", "--reverse", ref, "--", "state.json"], base_dir)
+    if not out:
+        return []
+
+    events, seen = [], set()
+    for sha in out.split():
+        blob = _git(["show", "%s:state.json" % sha], base_dir)
+        if not blob:
+            continue
+        try:
+            data = json.loads(blob)
+        except ValueError:
+            continue
+        for url, t in (data.get("targets") or {}).items():
+            name, status, since = t.get("name"), t.get("status"), t.get("since")
+            if not (name and status and since):
+                continue
+            key = (name, status, since)
+            if key in seen:
+                continue
+            seen.add(key)
+            events.append({"ts": since, "event": "transition", "name": name,
+                           "url": url, "to": status, "source": "github"})
+    return events
+
+
+def merge_events(local_history, ci_events):
+    """手元と CI の記録を時系列に並べ、状態が実際に変わった点だけ残す。
+
+    同じ在庫復活を両方が別々の時刻で記録するため、機種ごとに時系列で見て
+    直前と同じ状態の記録は捨てる。結果として最初に気づいた側の時刻が残る。
+    """
+    rows = []
+    for r in local_history or []:
+        if r.get("event") == "transition" and r.get("to"):
+            rows.append({"ts": r.get("ts"), "name": r.get("name"), "url": r.get("url"),
+                         "to": r.get("to"), "source": r.get("source", "mac")})
+    rows += list(ci_events or [])
+
+    per = {}
+    for r in rows:
+        ts = _parse(r.get("ts"))
+        if ts is None:
+            continue
+        per.setdefault(r.get("name"), []).append((ts, r))
+
+    merged = []
+    for name, items in per.items():
+        items.sort(key=lambda x: x[0])
+        last = None
+        for ts, r in items:
+            if r.get("to") == last:
+                continue          # 状態が変わっていない＝同じ変化の重複記録
+            last = r.get("to")
+            row = dict(r)
+            row["_ts"] = ts
+            merged.append(row)
+    merged.sort(key=lambda r: r["_ts"])
+    return merged
+
+
 def build_windows(history, state, now=None):
     """遷移の並びから「在庫があった区間」を組み立てる。"""
     now = now or datetime.now()
     per_target = {}
     for row in history:
-        if row.get("event") != "transition":
-            continue
-        ts = _parse(row.get("ts"))
+        ts = row.get("_ts") or _parse(row.get("ts"))
         if ts is None:
             continue
         per_target.setdefault(row.get("name", "?"), []).append((ts, row))
@@ -53,17 +139,17 @@ def build_windows(history, state, now=None):
     windows = []
     for name, rows in per_target.items():
         rows.sort(key=lambda x: x[0])
-        open_at = None
+        open_at, src = None, None
         for ts, row in rows:
             if row.get("to") == "in_stock":
-                open_at = ts
+                open_at, src = ts, row.get("source", "mac")
             elif open_at is not None:
                 windows.append({"name": name, "start": open_at, "end": ts,
-                                "ongoing": False})
+                                "ongoing": False, "source": src})
                 open_at = None
         if open_at is not None:
             windows.append({"name": name, "start": open_at, "end": now,
-                            "ongoing": True})
+                            "ongoing": True, "source": src})
     windows.sort(key=lambda w: w["start"], reverse=True)
     return windows
 
@@ -143,6 +229,8 @@ h2{font-size:15px;margin:34px 0 12px;color:var(--muted);font-weight:600;
 .tl .when{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted)}
 .tl .who{font-weight:650;font-size:14px}
 .tl .dur{margin-left:auto;font-size:13px;color:var(--muted)}
+.tl .src{font-size:11px;color:var(--muted);border:1px solid var(--line);
+ border-radius:999px;padding:2px 9px}
 .live{color:var(--ok);font-weight:700}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{border-collapse:collapse;width:100%;background:var(--card);
@@ -166,14 +254,21 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
         log_path = os.path.join(os.path.dirname(os.path.abspath(path)),
                                 "logs", "watcher.log")
     e = html.escape
+    base_dir = os.path.dirname(os.path.abspath(path))
     targets = state.get("targets") or {}
-    windows = build_windows(history, state, now)
+    ci_events = load_ci_history(base_dir,
+                                fetch=(cfg or {}).get("fetch_ci_history", True))
+    events = merge_events(history, ci_events)
+    windows = build_windows(events, state, now)
     parts = []
 
     parts.append('<div class="wrap">')
     parts.append("<h1>ゲオモバイル 在庫判定履歴</h1>")
-    parts.append('<p class="sub">最終チェック %s ／ このページは 60 秒ごとに再読み込みされます</p>'
-                 % e(state.get("last_run") or "未実行"))
+    n_ci_new = len([x for x in events if x.get("source") == "github"])
+    parts.append('<p class="sub">最終チェック %s ／ このページは 60 秒ごとに再読み込みされます<br>'
+                 '手元の Mac の記録と GitHub Actions の記録（%d 件）を統合しています'
+                 '（うち GitHub だけが捉えた変化 %d 件）</p>'
+                 % (e(state.get("last_run") or "未実行"), len(ci_events), n_ci_new))
 
     # 現在の状態
     parts.append('<div class="cards">')
@@ -227,9 +322,11 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
                 tail = '<span class="dur">%s で売り切れ</span>' % e(dur)
                 span = "%s 〜 %s" % (w["start"].strftime("%m/%d %H:%M"),
                                     w["end"].strftime("%m/%d %H:%M"))
+            src = {"github": "GitHub", "mac": "Mac"}.get(w.get("source"), "Mac")
             parts.append('<li><span class="who">%s</span>'
-                         '<span class="when">%s</span>%s</li>'
-                         % (e(w["name"]), e(span), tail))
+                         '<span class="when">%s</span>'
+                         '<span class="src">%s が検知</span>%s</li>'
+                         % (e(w["name"]), e(span), e(src), tail))
         parts.append("</ul>")
 
     # 最近のチェック
@@ -247,6 +344,9 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
                          % (e(r["ts"]), d, e(r["msg"])))
         parts.append("</tbody></table></div>")
 
+    parts.append('<p class="sub" style="margin-top:10px">'
+                 '区間の開始時刻は「検知した時刻」です。監視が途切れていた間に復活していた'
+                 '場合、実際の復活はこれより早い可能性があります。</p>')
     parts.append("<footer>在庫切れページにだけ現れる <code>&lt;section id=\"js-soldout\"&gt;</code> "
                  "の有無で判定しています。<br>"
                  "取得できなかった場合や想定外のページだった場合は「判定不能」として扱い、"
