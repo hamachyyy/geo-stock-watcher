@@ -5,6 +5,15 @@ on:
     # 5 分ごと。GitHub 側の混雑で 10〜30 分遅れることがある。
     - cron: '*/5 * * * *'
   workflow_dispatch:      # 手動実行用
+    inputs:
+      mode:
+        description: '実行内容'
+        type: choice
+        default: 'check'
+        options:
+          - check          # 通常のチェック
+          - test-notify    # 通知が届くかだけ確認する
+          - force-notify   # 在庫ありなら再通知間隔を無視して通知する
 
 permissions:
   contents: write         # state.json を書き戻すため
@@ -24,7 +33,13 @@ jobs:
       - name: 在庫を確認して変化があれば通知
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-        run: python3 watcher.py --once --durable-state
+          MODE: ${{ inputs.mode || 'check' }}
+        run: |
+          case "$MODE" in
+            test-notify)  python3 watcher.py --test-notify ;;
+            force-notify) python3 watcher.py --once --durable-state --force-notify ;;
+            *)            python3 watcher.py --once --durable-state ;;
+          esac
 
       - name: 在庫状態が変わっていれば記録を残す
         run: |
