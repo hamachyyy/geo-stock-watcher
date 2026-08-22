@@ -213,3 +213,28 @@ GeoStockWatcher/
 ├── .github/workflows/watch.yml   GitHub Actions の定期実行
 └── logs/                         実行ログ（git 管理外）
 ```
+
+---
+
+## 判定履歴を見る
+
+`watcher.py` を実行するたびに `history.html` が作り直されます。ダブルクリックで開けます
+（外部ファイルを読み込まない自己完結の HTML です）。60 秒ごとに自動再読み込みするので、
+開きっぱなしにしておけば最新の状態が映ります。
+
+```bash
+open /Users/mori/XCODE/GeoStockWatcher/history.html
+```
+
+表示される内容
+
+- **現在の状態** … 機種ごとの在庫状態と、その状態が続いている時間
+- **これまでの傾向** … 在庫復活を捉えた回数、在庫があった合計時間、平均・最短の在庫時間
+- **在庫があった区間** … いつ復活していつ売り切れたか、何分もったか
+- **最近のチェック** … 直近 120 件の判定結果
+
+履歴は `history.jsonl` に貯まります。`watcher.log` は肥大を防ぐため古い行を捨てますが、
+`history.jsonl` は**状態が変わったときだけ**追記されるので、過去の在庫復活は消えません。
+どちらも `.gitignore` 済みで、GitHub には上がりません。
+
+HTML を作らせたくない場合は `config.json` に `"write_html_report": false` を足します。

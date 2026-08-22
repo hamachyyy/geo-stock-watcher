@@ -3,3 +3,5 @@ config.local.json
 logs/
 *.tmp
 .DS_Store
+history.html
+history.jsonl

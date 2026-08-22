@@ -27,6 +27,8 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 LOCAL_CONFIG_PATH = os.path.join(BASE_DIR, "config.local.json")
 STATE_PATH = os.path.join(BASE_DIR, "state.json")
 LOG_PATH = os.path.join(BASE_DIR, "logs", "watcher.log")
+HISTORY_PATH = os.path.join(BASE_DIR, "history.jsonl")
+REPORT_PATH = os.path.join(BASE_DIR, "history.html")
 
 CURL = "/usr/bin/curl"
 
@@ -98,6 +100,39 @@ def _trim_log(max_bytes=1024 * 1024, keep_lines=3000):
             f.writelines(lines[-keep_lines:])
     except Exception:
         pass
+
+
+def record_history(event):
+    """状態が変わった出来事を history.jsonl に追記する。
+
+    watcher.log は肥大を防ぐため古い行を捨てるが、在庫の変化そのものは
+    後から振り返りたいので別ファイルに残す。変化時しか書かないため増え方は緩やか。
+    """
+    try:
+        event = dict(event)
+        event.setdefault("ts", iso(now()))
+        with open(HISTORY_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+    except Exception as e:  # noqa: BLE001
+        log("履歴の記録に失敗: %s" % e, "WARN")
+
+
+def load_history(limit=None):
+    """history.jsonl を古い順に読む。"""
+    rows = []
+    try:
+        with open(HISTORY_PATH, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except ValueError:
+                    continue
+    except IOError:
+        return []
+    return rows[-limit:] if limit else rows
 
 
 def load_json(path, default):
@@ -318,6 +353,8 @@ def check_all(cfg, state, force_notify=False):
             entry["status"] = status
             entry["since"] = iso(now())
             log("%s: %s -> %s" % (name, prev, status))
+            record_history({"event": "transition", "name": name, "url": url,
+                            "from": prev, "to": status})
             if status == IN_STOCK:
                 _send_restock(cfg, entry, name, url)
             elif prev == IN_STOCK:
@@ -359,6 +396,8 @@ def _maybe_health_alert(cfg, state, threshold, cooldown_hours):
                 "サイト構造の変更かネットワーク障害の可能性があります。" % (names, threshold),
                 priority="high", tags="warning")
     state["last_health_alert"] = iso(now())
+    record_history({"event": "health_alert", "name": names,
+                    "consecutive_errors": threshold})
 
 
 # --------------------------------------------------------------------------- cli
@@ -434,6 +473,12 @@ def main():
 
     state = check_all(cfg, state, force_notify=args.force_notify)
     save_json(STATE_PATH, strip_volatile(state) if args.durable_state else state)
+    if not args.durable_state and cfg.get("write_html_report", True):
+        try:
+            import report
+            report.write_report(cfg, state, load_history(), REPORT_PATH)
+        except Exception as e:  # noqa: BLE001
+            log("履歴HTMLの生成に失敗: %s" % e, "WARN")
     return 0
 
 
