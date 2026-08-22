@@ -25,7 +25,10 @@ from datetime import datetime, timedelta
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 LOCAL_CONFIG_PATH = os.path.join(BASE_DIR, "config.local.json")
+# CI はリポジトリに書き戻して状態を保つ。手元の Mac は別ファイルを使う。
+# 同じファイルを両方が書くと、CI の書き戻しと手元のコミットが毎回衝突するため。
 STATE_PATH = os.path.join(BASE_DIR, "state.json")
+LOCAL_STATE_PATH = os.path.join(BASE_DIR, "state.local.json")
 LOG_PATH = os.path.join(BASE_DIR, "logs", "watcher.log")
 HISTORY_PATH = os.path.join(BASE_DIR, "history.jsonl")
 REPORT_PATH = os.path.join(BASE_DIR, "history.html")
@@ -453,15 +456,19 @@ def main():
         print("ntfy のトピックが未設定です。config.local.json か環境変数 NTFY_TOPIC "
               "で指定してください。", file=sys.stderr)
         return 2
-    state = load_json(STATE_PATH, {})
+    state_path = STATE_PATH if args.durable_state else LOCAL_STATE_PATH
+    state = load_json(state_path, {})
+    if not state and state_path == LOCAL_STATE_PATH:
+        # 初回は CI 側の記録を引き継いで、いきなり「変化」と誤認しないようにする
+        state = load_json(STATE_PATH, {})
 
     if args.reset:
-        save_json(STATE_PATH, {})
+        save_json(state_path, {})
         print("状態をリセットしました。")
         return 0
 
     if args.status:
-        return cmd_status(cfg, state)
+        return cmd_status(cfg, state)  # ローカルの記録を表示する
 
     if args.test_notify:
         ok = notify_ntfy(cfg, "テスト通知",
@@ -472,7 +479,7 @@ def main():
         return 0 if ok else 1
 
     state = check_all(cfg, state, force_notify=args.force_notify)
-    save_json(STATE_PATH, strip_volatile(state) if args.durable_state else state)
+    save_json(state_path, strip_volatile(state) if args.durable_state else state)
     if not args.durable_state and cfg.get("write_html_report", True):
         try:
             import report
