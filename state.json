@@ -9,8 +9,8 @@
     },
     "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree": {
       "name": "iPhone SE2 (SIMフリー)",
-      "status": "in_stock",
-      "since": "2026-08-22 23:52:37",
+      "status": "sold_out",
+      "since": "2026-08-23 07:50:18",
       "last_notified": "2026-08-23 06:02:07",
       "consecutive_errors": 0
     }
