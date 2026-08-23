@@ -13,7 +13,7 @@ import re
 import calendar
 import subprocess
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 TS_FMT = "%Y-%m-%d %H:%M:%S"
 LABEL = {"in_stock": "在庫あり", "sold_out": "在庫切れ", "unknown": "判定不能"}
@@ -181,6 +181,101 @@ def build_windows(history, state, now=None):
     return windows
 
 
+def _repo_slug(base_dir):
+    """origin の URL から owner/repo を取り出す。"""
+    url = _git(["remote", "get-url", "origin"], base_dir)
+    if not url:
+        return None
+    m = re.search(r"github\.com[:/]([^/]+/[^/\s]+?)(?:\.git)?\s*$", url)
+    return m.group(1) if m else None
+
+
+def load_ci_runs(base_dir, limit=60, timeout=20):
+    """GitHub Actions の実行記録を取ってくる。
+
+    CI は在庫状態が変わらないと何も残さないので、1 回ごとの判定は
+    「いつ実行されたか」と「その時点の在庫状態」から組み立てる。
+    公開リポジトリなので認証なしで読める（未認証は 60 回/時、こちらは 12 回/時）。
+    """
+    slug = _repo_slug(base_dir)
+    if not slug:
+        return []
+    url = ("https://api.github.com/repos/%s/actions/runs?per_page=%d"
+           % (slug, min(limit, 100)))
+    try:
+        r = subprocess.run(["/usr/bin/curl", "-sS", "--max-time", str(timeout),
+                            "-H", "Accept: application/vnd.github+json", url],
+                           capture_output=True, timeout=timeout + 10)
+        data = json.loads(r.stdout.decode("utf-8", "replace"))
+    except Exception:  # noqa: BLE001
+        return []
+
+    runs = []
+    for run in data.get("workflow_runs") or []:
+        started = run.get("run_started_at") or run.get("created_at")
+        if not started:
+            continue
+        try:
+            utc = datetime.strptime(started, "%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            continue
+        local = datetime.fromtimestamp(calendar.timegm(utc.timetuple()))
+        runs.append({"ts": local, "conclusion": run.get("conclusion"),
+                     "status": run.get("status"), "event": run.get("event")})
+    runs.sort(key=lambda r: r["ts"])
+    return runs
+
+
+def status_at(events, name, when):
+    """統合済みの遷移から、ある時刻におけるその機種の在庫状態を求める。
+
+    CI は状態が変わったときだけコミットする。裏を返すと、コミットが無い間の実行は
+    すべて直前のコミットと同じ状態を見ていたことになるので、こう復元できる。
+    """
+    found = None
+    for r in events:
+        if r.get("name") != name:
+            continue
+        ts = r.get("_ts") or _parse(r.get("ts"))
+        if ts is None or ts > when:
+            continue
+        found = r.get("to")
+    return found
+
+
+def build_ci_check_rows(runs, events, names):
+    """実行記録と状態の推移から、CI 側の「最近のチェック」行を組み立てる。
+
+    状態の変化を記録できるのは実行中の CI だけなので、遷移の時刻は必ずどれかの実行の
+    最中に入る。開始時刻で引くと、変化を見つけた当の実行が「変化前」の状態を見たことに
+    なってしまうため、その実行が終わるあたりまで含めて引く。
+    """
+    rows = []
+    for idx, run in enumerate(runs):
+        # その実行に帰属させる範囲。次の実行の直前を超えないようにする
+        edge = run["ts"] + timedelta(minutes=5)
+        if idx + 1 < len(runs):
+            nxt = runs[idx + 1]["ts"] - timedelta(seconds=1)
+            if nxt < edge:
+                edge = nxt
+        run = dict(run, lookup=edge)
+        if run.get("status") != "completed":
+            continue
+        if run.get("conclusion") != "success":
+            rows.append({"ts": run["ts"].strftime(TS_FMT), "source": "github",
+                         "status": None,
+                         "msg": "実行が失敗しました（%s）" % (run.get("conclusion") or "?")})
+            continue
+        for name in names:
+            st = status_at(events, name, run.get("lookup", run["ts"]))
+            if st is None:
+                continue
+            rows.append({"ts": run["ts"].strftime(TS_FMT), "source": "github",
+                         "status": st,
+                         "msg": "%s: %s" % (name, LABEL.get(st, st))})
+    return rows
+
+
 def read_recent_log(log_path, limit=120):
     """最近のチェック結果をログから拾う。"""
     rows = []
@@ -267,6 +362,9 @@ th,td{text-align:left;padding:8px 14px;border-bottom:1px solid var(--line);
 th{color:var(--muted);font-weight:600;font-size:12px}
 tr:last-child td{border-bottom:none}
 td.ts{font-variant-numeric:tabular-nums;color:var(--muted)}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;
+ border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.t-github{border-color:var(--accent);color:var(--accent)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px}
 .d-in{background:var(--ok)} .d-out{background:var(--out)} .d-unk{background:var(--warn)}
 .empty{color:var(--muted);font-size:13px;background:var(--card);
@@ -286,6 +384,8 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
     ci_events = load_ci_history(base_dir,
                                 fetch=(cfg or {}).get("fetch_ci_history", True))
     events = merge_events(history, ci_events)
+    ci_runs = (load_ci_runs(base_dir) if (cfg or {}).get("fetch_ci_runs", True)
+               else [])
     windows = build_windows(events, state, now)
     parts = []
 
@@ -360,18 +460,40 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
         parts.append("</ul>")
 
     # 最近のチェック
-    rows = read_recent_log(log_path)
+    mac_rows = read_recent_log(log_path)
+    for r in mac_rows:
+        r["source"] = "mac"
+    names = [t.get("name") for t in targets.values() if t.get("name")]
+    ci_rows = build_ci_check_rows(ci_runs, events, names)
+    rows = sorted(mac_rows + ci_rows, key=lambda r: r["ts"], reverse=True)[:160]
+
     parts.append("<h2>最近のチェック</h2>")
+
+    # GitHub 側が実際どれくらいの間隔で動いているかを添える
+    sched = [r["ts"] for r in ci_runs if r.get("event") == "schedule"]
+    if len(sched) >= 3:
+        gaps = sorted((sched[i + 1] - sched[i]).total_seconds()
+                      for i in range(len(sched) - 1))
+        med = gaps[len(gaps) // 2]
+        parts.append('<p class="sub">GitHub の定期実行は設定上 5 分間隔ですが、'
+                     '実測の間隔は中央値 %s・最長 %s です（直近 %d 回）。'
+                     'GitHub 側で間引かれるため、設定値どおりには動きません。</p>'
+                     % (e(_fmt_dur(med)), e(_fmt_dur(gaps[-1])), len(sched)))
+
     if not rows:
-        parts.append('<div class="empty">ログがまだありません。</div>')
+        parts.append('<div class="empty">記録がまだありません。</div>')
     else:
         parts.append('<div class="scroll"><table><thead><tr>'
-                     "<th>時刻</th><th>結果</th></tr></thead><tbody>")
+                     "<th>時刻</th><th>出どころ</th><th>結果</th>"
+                     "</tr></thead><tbody>")
         for r in rows:
-            d = {"in_stock": "d-in", "sold_out": "d-out"}.get(r["status"], "d-unk")
-            parts.append('<tr><td class="ts">%s</td><td>'
+            d = {"in_stock": "d-in", "sold_out": "d-out"}.get(r.get("status"), "d-unk")
+            src = "GitHub" if r.get("source") == "github" else "Mac"
+            parts.append('<tr><td class="ts">%s</td>'
+                         '<td><span class="tag t-%s">%s</span></td><td>'
                          '<span class="dot %s"></span>%s</td></tr>'
-                         % (e(r["ts"]), d, e(r["msg"])))
+                         % (e(r["ts"]), e(r.get("source", "mac")), e(src), d,
+                            e(r["msg"])))
         parts.append("</tbody></table></div>")
 
     parts.append('<p class="sub" style="margin-top:10px">'
