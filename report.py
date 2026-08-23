@@ -220,7 +220,13 @@ def load_ci_runs(base_dir, limit=60, timeout=20):
         except ValueError:
             continue
         local = datetime.fromtimestamp(calendar.timegm(utc.timetuple()))
-        runs.append({"ts": local, "conclusion": run.get("conclusion"),
+        ended = None
+        try:
+            eu = datetime.strptime(run.get("updated_at") or "", "%Y-%m-%dT%H:%M:%SZ")
+            ended = datetime.fromtimestamp(calendar.timegm(eu.timetuple()))
+        except ValueError:
+            pass
+        runs.append({"ts": local, "end": ended, "conclusion": run.get("conclusion"),
                      "status": run.get("status"), "event": run.get("event")})
     runs.sort(key=lambda r: r["ts"])
     return runs
@@ -251,28 +257,41 @@ def build_ci_check_rows(runs, events, names):
     なってしまうため、その実行が終わるあたりまで含めて引く。
     """
     rows = []
-    for idx, run in enumerate(runs):
+    now = datetime.now()
+    for idx, run in enumerate(runs):  # noqa: B007
         # その実行に帰属させる範囲。次の実行の直前を超えないようにする
-        edge = run["ts"] + timedelta(minutes=5)
+        edge = (run.get("end") or now) + timedelta(minutes=2)
         if idx + 1 < len(runs):
             nxt = runs[idx + 1]["ts"] - timedelta(seconds=1)
             if nxt < edge:
                 edge = nxt
         run = dict(run, lookup=edge)
-        if run.get("status") != "completed":
+        running = run.get("status") in ("in_progress", "queued", "requested",
+                                        "waiting", "pending")
+        if not running and run.get("status") != "completed":
             continue
-        if run.get("conclusion") != "success":
+        if not running and run.get("conclusion") != "success":
             rows.append({"ts": run["ts"].strftime(TS_FMT), "source": "github",
                          "status": None,
                          "msg": "実行が失敗しました（%s）" % (run.get("conclusion") or "?")})
             continue
+        # 1 回の実行の中で何度もチェックしているため、その範囲を添える
+        span = ""
+        if running:
+            span = "（%s〜 監視中）" % run["ts"].strftime("%H:%M")
+        elif run.get("end") and run["end"] > run["ts"]:
+            minutes = (run["end"] - run["ts"]).total_seconds() / 60.0
+            if minutes >= 3:
+                span = ("（%s〜%s を約 %d 分間、2 分ごとに監視）"
+                        % (run["ts"].strftime("%H:%M"), run["end"].strftime("%H:%M"),
+                           int(round(minutes))))
         for name in names:
             st = status_at(events, name, run.get("lookup", run["ts"]))
             if st is None:
                 continue
             rows.append({"ts": run["ts"].strftime(TS_FMT), "source": "github",
                          "status": st,
-                         "msg": "%s: %s" % (name, LABEL.get(st, st))})
+                         "msg": "%s: %s%s" % (name, LABEL.get(st, st), span)})
     return rows
 
 
@@ -470,15 +489,16 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
     parts.append("<h2>最近のチェック</h2>")
 
     # GitHub 側が実際どれくらいの間隔で動いているかを添える
-    sched = [r["ts"] for r in ci_runs if r.get("event") == "schedule"]
-    if len(sched) >= 3:
-        gaps = sorted((sched[i + 1] - sched[i]).total_seconds()
-                      for i in range(len(sched) - 1))
-        med = gaps[len(gaps) // 2]
-        parts.append('<p class="sub">GitHub の定期実行は設定上 5 分間隔ですが、'
-                     '実測の間隔は中央値 %s・最長 %s です（直近 %d 回）。'
-                     'GitHub 側で間引かれるため、設定値どおりには動きません。</p>'
-                     % (e(_fmt_dur(med)), e(_fmt_dur(gaps[-1])), len(sched)))
+    done_runs = [r for r in ci_runs if r.get("end") and r["end"] > r["ts"]]
+    if len(done_runs) >= 3:
+        first, last = done_runs[0]["ts"], done_runs[-1]["end"]
+        elapsed = (last - first).total_seconds()
+        covered = sum((r["end"] - r["ts"]).total_seconds() for r in done_runs)
+        pct = (covered / elapsed * 100) if elapsed > 0 else 0
+        parts.append('<p class="sub">GitHub の定期実行は間引かれるため、1 回の実行を'
+                     '長く回して 2 分ごとにチェックしています。直近 %s のうち'
+                     '<strong>%s（%.0f%%）</strong>が監視できていた時間です。</p>'
+                     % (e(_fmt_dur(elapsed)), e(_fmt_dur(covered)), pct))
 
     if not rows:
         parts.append('<div class="empty">記録がまだありません。</div>')
