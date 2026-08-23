@@ -10,7 +10,9 @@ import html
 import json
 import os
 import re
+import calendar
 import subprocess
+import time
 from datetime import datetime
 
 TS_FMT = "%Y-%m-%d %H:%M:%S"
@@ -65,12 +67,17 @@ def load_ci_history(base_dir, fetch=True):
         _git(["fetch", "--quiet", "origin", "main"], base_dir, timeout=25)
     ref = "origin/main" if _git(["rev-parse", "--verify", "--quiet",
                                  "origin/main"], base_dir) else "HEAD"
-    out = _git(["log", "--format=%H", "--reverse", ref, "--", "state.json"], base_dir)
+    out = _git(["log", "--format=%H %at", "--reverse", ref, "--", "state.json"],
+               base_dir)
     if not out:
         return []
 
     events, seen = [], set()
-    for sha in out.split():
+    for line in out.strip().splitlines():
+        bits = line.split()
+        if len(bits) < 2:
+            continue
+        sha, commit_at = bits[0], int(bits[1])
         blob = _git(["show", "%s:state.json" % sha], base_dir)
         if not blob:
             continue
@@ -86,9 +93,28 @@ def load_ci_history(base_dir, fetch=True):
             if key in seen:
                 continue
             seen.add(key)
-            events.append({"ts": since, "event": "transition", "name": name,
+            events.append({"ts": _normalize_ci_ts(since, commit_at),
+                           "event": "transition", "name": name,
                            "url": url, "to": status, "source": "github"})
     return events
+
+
+def _normalize_ci_ts(since, commit_at):
+    """CI が UTC で書いた時刻を手元のタイムゾーンに直す。
+
+    ワークフローに TZ を設定する前のランナーは UTC で時刻を記録していた。手元の Mac は
+    JST で記録するため、混ぜると 9 時間ずれる。その版を書いたコミットの時刻と突き合わせ、
+    「その実行が書いたばかりの値」だけを UTC とみなして変換する。前の版から持ち越された
+    古い値（もともと手元由来）は触らない。
+    """
+    naive = _parse(since)
+    if naive is None:
+        return since
+    as_utc = calendar.timegm(naive.timetuple())
+    # そのコミットの直前 2 時間以内に書かれた値なら、その実行が記録したもの
+    if commit_at - 7200 <= as_utc <= commit_at + 300:
+        return datetime.fromtimestamp(as_utc).strftime(TS_FMT)
+    return since
 
 
 def merge_events(local_history, ci_events):
@@ -145,11 +171,12 @@ def build_windows(history, state, now=None):
                 open_at, src = ts, row.get("source", "mac")
             elif open_at is not None:
                 windows.append({"name": name, "start": open_at, "end": ts,
-                                "ongoing": False, "source": src})
+                                "ongoing": False, "source": src,
+                                "end_source": row.get("source", "mac")})
                 open_at = None
         if open_at is not None:
             windows.append({"name": name, "start": open_at, "end": now,
-                            "ongoing": True, "source": src})
+                            "ongoing": True, "source": src, "end_source": None})
     windows.sort(key=lambda w: w["start"], reverse=True)
     return windows
 
@@ -322,10 +349,13 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
                 tail = '<span class="dur">%s で売り切れ</span>' % e(dur)
                 span = "%s 〜 %s" % (w["start"].strftime("%m/%d %H:%M"),
                                     w["end"].strftime("%m/%d %H:%M"))
-            src = {"github": "GitHub", "mac": "Mac"}.get(w.get("source"), "Mac")
+            label = {"github": "GitHub", "mac": "Mac"}
+            src = "復活: %s" % label.get(w.get("source"), "Mac")
+            if w.get("end_source"):
+                src += " ／ 売切: %s" % label.get(w["end_source"], "Mac")
             parts.append('<li><span class="who">%s</span>'
                          '<span class="when">%s</span>'
-                         '<span class="src">%s が検知</span>%s</li>'
+                         '<span class="src">%s</span>%s</li>'
                          % (e(w["name"]), e(span), e(src), tail))
         parts.append("</ul>")
 

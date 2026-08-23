@@ -27,6 +27,10 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      # ランナーの既定は UTC。手元の Mac は JST で時刻を記録するため、
+      # 揃えておかないと履歴を統合したときに 9 時間ずれる。
+      TZ: Asia/Tokyo
     steps:
       - uses: actions/checkout@v4
 
