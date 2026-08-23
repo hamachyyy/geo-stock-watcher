@@ -2,31 +2,37 @@ name: 在庫チェック
 
 on:
   schedule:
-    # 5 分ごと。GitHub 側の混雑で 10〜30 分遅れることがある。
+    # GitHub 側で大幅に間引かれ、実測では 1 時間前後の間隔になる。
+    # そのため 1 回の実行を長く回して、次の実行までの隙間を自前で埋める。
     - cron: '*/5 * * * *'
-  workflow_dispatch:      # 手動実行用
+  workflow_dispatch:
     inputs:
       mode:
         description: '実行内容'
         type: choice
-        default: 'check'
+        default: 'loop'
         options:
-          - check          # 通常のチェック
+          - loop           # 既定。一定時間ループしながら監視する
+          - once           # 1 回だけチェックする
           - test-notify    # 通知が届くかだけ確認する
           - force-notify   # 在庫ありなら再通知間隔を無視して通知する
+      loop_minutes:
+        description: 'ループする分数（loop のとき）'
+        type: string
+        default: '50'
 
 permissions:
-  contents: write         # state.json を書き戻すため
+  contents: write
 
 concurrency:
-  # 前の実行が終わる前に次が始まって状態が壊れるのを防ぐ
+  # 実行が重なって状態が壊れるのを防ぐ。走っている間に来た分は待たせる。
   group: stock-watch
   cancel-in-progress: false
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 65
     env:
       # ランナーの既定は UTC。手元の Mac は JST で時刻を記録するため、
       # 揃えておかないと履歴を統合したときに 9 時間ずれる。
@@ -34,25 +40,62 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 在庫を確認して変化があれば通知
+      - name: 在庫を監視する
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          MODE: ${{ inputs.mode || 'check' }}
+          MODE: ${{ inputs.mode || 'loop' }}
+          LOOP_MINUTES: ${{ inputs.loop_minutes || '50' }}
+          INTERVAL_SECONDS: '120'
         run: |
-          case "$MODE" in
-            test-notify)  python3 watcher.py --test-notify ;;
-            force-notify) python3 watcher.py --once --durable-state --force-notify ;;
-            *)            python3 watcher.py --once --durable-state ;;
-          esac
+          set -uo pipefail
 
-      - name: 在庫状態が変わっていれば記録を残す
-        run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state.json
-          if git diff --staged --quiet; then
-            echo "在庫状態に変化なし。コミットしません。"
-          else
-            git commit -m "在庫状態を更新: $(date -u '+%Y-%m-%d %H:%M UTC')"
-            git push
-          fi
+
+          # 在庫状態が変わったらその場で記録する。実行が打ち切られても履歴が残るように、
+          # ループの最後にまとめてではなく変化のたびにコミットする。
+          persist() {
+            git add state.json
+            if git diff --staged --quiet; then
+              return 0
+            fi
+            git commit -q -m "在庫状態を更新: $(date '+%Y-%m-%d %H:%M %Z')"
+            git pull --rebase -q origin main || return 0
+            git push -q origin HEAD:main || echo "push に失敗（次の変化時に再試行）"
+          }
+
+          case "$MODE" in
+            test-notify)
+              python3 watcher.py --test-notify
+              exit $?
+              ;;
+            force-notify)
+              python3 watcher.py --once --durable-state --force-notify
+              persist
+              exit 0
+              ;;
+            once)
+              python3 watcher.py --once --durable-state
+              persist
+              exit 0
+              ;;
+          esac
+
+          # 設定不備（通知先が未設定など）はここで落として気づけるようにする
+          python3 watcher.py --once --durable-state || exit $?
+          persist
+
+          END=$(( $(date +%s) + LOOP_MINUTES * 60 ))
+          n=1
+          while true; do
+            REMAIN=$(( END - $(date +%s) ))
+            if [ "$REMAIN" -lt "$INTERVAL_SECONDS" ]; then
+              break
+            fi
+            sleep "$INTERVAL_SECONDS"
+            n=$(( n + 1 ))
+            # 一時的な取得失敗でループ全体を止めない
+            python3 watcher.py --once --durable-state || echo "この回は失敗（継続します）"
+            persist
+          done
+          echo "ループ終了: ${n} 回チェックしました（約 ${LOOP_MINUTES} 分）"
