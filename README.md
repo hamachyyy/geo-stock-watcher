@@ -108,6 +108,12 @@ cd /Users/mori/XCODE/GeoStockWatcher && ./install.sh
 
 ---
 
+## 既知の弱点
+
+作った過程での失敗と、この運用が抱えるリスクは [POSTMORTEM.md](POSTMORTEM.md) にまとめてある。
+とくに**監視が静かに死ぬ経路**（GitHub が定期実行を止めた場合、警告すら出ない）は
+把握しておくこと。
+
 ## 仕組み
 
 ### 在庫判定
