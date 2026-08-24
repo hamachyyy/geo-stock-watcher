@@ -4,6 +4,7 @@ on:
   schedule:
     # GitHub 側で大幅に間引かれ、実測では 1 時間前後の間隔になる。
     # そのため 1 回の実行を長く回して、次の実行までの隙間を自前で埋める。
+    # GitHub ホストランナーは 1 ジョブ最大 6 時間のため、5.5 時間（330 分）を既定にしている。
     - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
@@ -19,7 +20,7 @@ on:
       loop_minutes:
         description: 'ループする分数（loop のとき）'
         type: string
-        default: '50'
+        default: '330'
 
 permissions:
   contents: write
@@ -32,7 +33,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 340   # ループ既定 330 分 + 後始末の余裕
     env:
       # ランナーの既定は UTC。手元の Mac は JST で時刻を記録するため、
       # 揃えておかないと履歴を統合したときに 9 時間ずれる。
@@ -44,7 +45,7 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           MODE: ${{ inputs.mode || 'loop' }}
-          LOOP_MINUTES: ${{ inputs.loop_minutes || '50' }}
+          LOOP_MINUTES: ${{ inputs.loop_minutes || '330' }}
           INTERVAL_SECONDS: '120'
         run: |
           set -uo pipefail
