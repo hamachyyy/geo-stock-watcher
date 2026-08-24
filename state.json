@@ -223,6 +223,13 @@
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
       "consecutive_errors": 0
+    },
+    "https://mvno.geo-mobile.jp/outlet/": {
+      "name": "アウトレット（訳アリ品・中古未使用品）",
+      "status": "unknown",
+      "since": "2026-08-25 07:37:57",
+      "last_notified": null,
+      "consecutive_errors": 1
     }
   }
 }
