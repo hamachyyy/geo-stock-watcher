@@ -14,6 +14,11 @@
       "name": "iPhone SE2 (SIMフリー)",
       "url": "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree",
       "title_contains": "iPhone SE 第2世代"
+    },
+    {
+      "name": "アウトレット（訳アリ品・中古未使用品）",
+      "type": "outlet_listing",
+      "url": "https://mvno.geo-mobile.jp/outlet/"
     }
   ],
   "renotify_hours": 6,

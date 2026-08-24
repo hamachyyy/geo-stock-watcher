@@ -245,6 +245,109 @@ def classify(html, sentinel=DEFAULT_SENTINEL, title_contains=None):
 
 # --------------------------------------------------------------------------- notify
 
+OUTLET_MIN_PRODUCTS = 15   # 実測 22 機種。これを下回ったら構造が壊れたとみなす
+OUTLET_VARIANT_RANGE = (15, 60)  # 実測 29 バリアント。この範囲外なら解析失敗とみなす
+OUTLET_MASS_CHANGE_RATIO = 0.7   # 既知の在庫切れのうち何割が同時に化けたら疑うか
+OUTLET_MASS_CHANGE_MIN = 10      # ↑の判定に使う最低サンプル数
+
+
+def _parse_outlet_reuse_section(content, base_name):
+    """訳アリ品（状態C）区画: 容量ごとに <dd> が並び、それぞれに在庫状態がある。"""
+    items = []
+    dl_m = re.search(r'<dl class="price_box_problem">(.*?)</dl>', content, re.S)
+    if not dl_m:
+        return items
+    for dd in re.findall(r'<dd>(.*?)</dd>', dl_m.group(1), re.S):
+        dev_m = re.search(r'name="i_device"\s+value="(\d+)"', dd)
+        if not dev_m:
+            continue
+        cap_m = re.search(r'<div class="production_strage">\s*<div>([^<]*)</div>', dd)
+        capacity = (cap_m.group(1).strip() if cap_m else "")
+        strage_m = re.search(r'name="i_strage"\s+value="(\w+)"', dd)
+        key = "i_device=%s&i_strage=%s" % (dev_m.group(1),
+                                            strage_m.group(1) if strage_m else "")
+        label = (("%s %s（アウトレット）" % (base_name, capacity)).strip()
+                 if capacity and capacity not in base_name
+                 else "%s（アウトレット）" % base_name)
+        status = SOLD_OUT if "-soldout" in dd else IN_STOCK
+        items.append({"key": key, "label": label, "status": status})
+    return items
+
+
+def _parse_outlet_new_unused_section(content, base_name):
+    """中古未使用品区画: 容量分けが無く、商品ごとに在庫状態が 1 つだけある。"""
+    dev_m = re.search(r'name="i_device"\s+value="(\d+)"', content)
+    if not dev_m:
+        return []
+    key = "i_device=%s&i_strage=" % dev_m.group(1)
+    label = "%s（中古未使用品）" % base_name
+    status = SOLD_OUT if "-soldout" in content else IN_STOCK
+    return [{"key": key, "label": label, "status": status}]
+
+
+def parse_outlet_listing(html):
+    """アウトレットページ（訳アリ品／中古未使用品）を機種・容量ごとの在庫状態に分解する。
+
+    このページには性質の異なる 2 種類の商品区画が同居している。
+    どちらも `<section class="item_wrapper">...</section>` で 1 機種ぶんを表すが、
+
+    - 訳アリ品（状態C）: 容量ごとに `<dd>` が並び、`<dl class="price_box_problem">`
+      の中に容量分の在庫状態がある（1 機種で複数バリアント）
+    - 中古未使用品: 容量分けが無く、商品ごとに `apply-btn` が 1 つだけある
+
+    区画がどちらのタブに属すかではなく、区画の中身（`price_box_problem` の有無）で
+    判定する。タブの HTML 構造が変わってもこちらは変わりにくいため。
+
+    返り値は (items, ok)。items は {"key","label","status"} のリスト。
+    ok が False のときはページ構造が想定と大きく違うということなので、
+    呼び出し側は在庫状態を更新せず「判定不能」として扱う。
+    """
+    if not html or len(html) < 20000 or "</html>" not in html:
+        return [], False
+
+    sections = re.findall(r'<section class="item_wrapper">(.*?)</section>', html, re.S)
+    if len(sections) < OUTLET_MIN_PRODUCTS:
+        return [], False
+
+    items = []
+    for content in sections:
+        h3_m = re.search(r'<h3>.*?<br\s*/?>\s*([^<]+?)\s*</h3>', content, re.S)
+        if not h3_m:
+            continue
+        base_name = h3_m.group(1).strip()
+        if 'price_box_problem' in content:
+            items += _parse_outlet_reuse_section(content, base_name)
+        elif 'apply-btn' in content:
+            items += _parse_outlet_new_unused_section(content, base_name)
+
+    if not (OUTLET_VARIANT_RANGE[0] <= len(items) <= OUTLET_VARIANT_RANGE[1]):
+        return [], False
+    return items, True
+
+
+def _outlet_mass_change_guard(tstate, url, items):
+    """既知の在庫切れの大半が同時に在庫ありへ変わっていないかを確かめる。
+
+    アウトレット（訳アリ品）は数量限定の中古在庫で、多数の機種が同時に
+    再入荷することは通常考えにくい。`-soldout` のクラス名が変わるなど
+    サイト改修でマーカーを見失うと、全バリアントが一斉に「在庫あり」に
+    見えてしまう（実際に検証で再現した）。それを在庫復活と誤解して
+    一斉通知するのを防ぐためのガード。
+    """
+    known_sold_out = 0
+    flipped = 0
+    for it in items:
+        prev = tstate.get("%s#%s" % (url, it["key"]), {}).get("status")
+        if prev == SOLD_OUT:
+            known_sold_out += 1
+            if it["status"] == IN_STOCK:
+                flipped += 1
+    if (known_sold_out >= OUTLET_MASS_CHANGE_MIN
+            and flipped / known_sold_out >= OUTLET_MASS_CHANGE_RATIO):
+        return False, flipped, known_sold_out
+    return True, flipped, known_sold_out
+
+
 def _encode_header(value):
     """ntfy のヘッダは ASCII のみ。日本語は RFC 2047 で encoded-word にする。"""
     try:
@@ -310,67 +413,131 @@ def _notify_mac(title, message):
 
 # --------------------------------------------------------------------------- core
 
+def _update_entry(cfg, state, key, name, url, status, err, renotify_hours,
+                  force_notify, quiet=False):
+    """1 対象ぶんの判定結果を状態に反映し、必要なら通知する。
+
+    status が None なら取得失敗（err にエラー内容）。UNKNOWN ならページ構造が
+    想定外。それ以外なら実際の在庫状態。quiet=True のときは「変化なし」の
+    ログ行だけ抑える（アウトレットのように対象数が多い場合に使う）。
+    """
+    tstate = state.setdefault("targets", {})
+    entry = tstate.setdefault(key, {
+        "name": name, "status": UNKNOWN, "since": iso(now()),
+        "last_checked": None, "last_notified": None, "consecutive_errors": 0,
+    })
+    entry["name"] = name
+
+    if status is None:
+        entry["consecutive_errors"] = entry.get("consecutive_errors", 0) + 1
+        entry["last_checked"] = iso(now())
+        log("%s: 取得失敗 (%s) 連続%d回目" % (name, err, entry["consecutive_errors"]),
+            "WARN")
+        return
+
+    entry["last_checked"] = iso(now())
+
+    if status == UNKNOWN:
+        entry["consecutive_errors"] = entry.get("consecutive_errors", 0) + 1
+        log("%s: 判定不能 (ページ構造が想定外) 連続%d回目"
+            % (name, entry["consecutive_errors"]), "WARN")
+        return
+
+    entry["consecutive_errors"] = 0
+    prev = entry.get("status", UNKNOWN)
+
+    if status != prev:
+        entry["status"] = status
+        entry["since"] = iso(now())
+        log("%s: %s -> %s" % (name, prev, status))
+        record_history({"event": "transition", "name": name, "url": url,
+                        "from": prev, "to": status})
+        if status == IN_STOCK:
+            _send_restock(cfg, entry, name, url)
+        elif prev == IN_STOCK:
+            notify_ntfy(cfg, "在庫切れに戻りました",
+                        "%s は再び在庫切れになりました。\n%s" % (name, url),
+                        click_url=url, priority="default", tags="heavy_minus_sign")
+    else:
+        if not quiet:
+            log("%s: %s (変化なし)" % (name, status))
+        if status == IN_STOCK:
+            last = parse_iso(entry.get("last_notified"))
+            due = last is None or (now() - last) >= timedelta(hours=renotify_hours)
+            if due or force_notify:
+                _send_restock(cfg, entry, name, url, repeat=True)
+
+
+def _check_product_page(cfg, state, t, renotify_hours, force_notify):
+    url = t["url"]
+    name = t.get("name", url.rsplit("/", 1)[-1])
+    sentinel = t.get("sentinel", DEFAULT_SENTINEL)
+    title_contains = t.get("title_contains")
+
+    html, err = fetch(url)
+    if html is None:
+        _update_entry(cfg, state, url, name, url, None, err, renotify_hours,
+                      force_notify)
+        return
+
+    status = classify(html, sentinel, title_contains)
+    _update_entry(cfg, state, url, name, url, status, None, renotify_hours,
+                  force_notify)
+
+
+def _check_outlet_listing(cfg, state, t, renotify_hours, force_notify):
+    url = t["url"]
+    name = t.get("name", "アウトレット")
+    meta_key = url  # ページ全体の取得・解析失敗を追跡する代表キー
+    tstate = state.setdefault("targets", {})
+
+    html, err = fetch(url)
+    if html is None:
+        _update_entry(cfg, state, meta_key, name, url, None, err, renotify_hours,
+                      force_notify)
+        return
+
+    items, ok = parse_outlet_listing(html)
+    if not ok:
+        _update_entry(cfg, state, meta_key, name, url, UNKNOWN, None,
+                      renotify_hours, force_notify)
+        log("%s: 一覧の解析に失敗（見つかった商品数が想定と違う）" % name, "WARN")
+        return
+
+    sane, flipped, known = _outlet_mass_change_guard(tstate, url, items)
+    if not sane:
+        log("%s: 既知の在庫切れ %d 件中 %d 件が同時に在庫ありへ変化。"
+            "サイト構造の変化を疑い、今回は更新を保留" % (name, known, flipped), "WARN")
+        _update_entry(cfg, state, meta_key, name, url, UNKNOWN, None,
+                      renotify_hours, force_notify)
+        return
+
+    # ページ自体は正常に読めたので、代表キーに残っていた失敗記録は消す
+    tstate.pop(meta_key, None)
+
+    for item in items:
+        key = "%s#%s" % (url, item["key"])
+        _update_entry(cfg, state, key, item["label"], url, item["status"], None,
+                      renotify_hours, force_notify, quiet=True)
+
+    in_stock_n = sum(1 for it in items if it["status"] == IN_STOCK)
+    log("%s: %d件中%d件が在庫あり" % (name, len(items), in_stock_n))
+
+
 def check_all(cfg, state, force_notify=False):
     targets = cfg.get("targets", [])
-    tstate = state.setdefault("targets", {})
     renotify_hours = float(cfg.get("renotify_hours", 6))
     err_threshold = int(cfg.get("health_alert_after_errors", 6))
     health_cooldown = float(cfg.get("health_alert_cooldown_hours", 12))
 
     for t in targets:
-        url = t["url"]
-        name = t.get("name", url.rsplit("/", 1)[-1])
-        sentinel = t.get("sentinel", DEFAULT_SENTINEL)
-        title_contains = t.get("title_contains")
-
         # アクセスの間隔を少しばらけさせる
         time.sleep(random.uniform(0.5, 4.0))
 
-        html, err = fetch(url)
-        entry = tstate.setdefault(url, {
-            "name": name, "status": UNKNOWN, "since": iso(now()),
-            "last_checked": None, "last_notified": None, "consecutive_errors": 0,
-        })
-        entry["name"] = name
-
-        if html is None:
-            entry["consecutive_errors"] = entry.get("consecutive_errors", 0) + 1
-            entry["last_checked"] = iso(now())
-            log("%s: 取得失敗 (%s) 連続%d回目" % (name, err, entry["consecutive_errors"]),
-                "WARN")
-            continue
-
-        status = classify(html, sentinel, title_contains)
-        entry["last_checked"] = iso(now())
-
-        if status == UNKNOWN:
-            entry["consecutive_errors"] = entry.get("consecutive_errors", 0) + 1
-            log("%s: 判定不能 (ページ構造が想定外) 連続%d回目"
-                % (name, entry["consecutive_errors"]), "WARN")
-            continue
-
-        entry["consecutive_errors"] = 0
-        prev = entry.get("status", UNKNOWN)
-
-        if status != prev:
-            entry["status"] = status
-            entry["since"] = iso(now())
-            log("%s: %s -> %s" % (name, prev, status))
-            record_history({"event": "transition", "name": name, "url": url,
-                            "from": prev, "to": status})
-            if status == IN_STOCK:
-                _send_restock(cfg, entry, name, url)
-            elif prev == IN_STOCK:
-                notify_ntfy(cfg, "在庫切れに戻りました",
-                            "%s は再び在庫切れになりました。\n%s" % (name, url),
-                            click_url=url, priority="default", tags="heavy_minus_sign")
+        if t.get("type") == "outlet_listing":
+            _check_outlet_listing(cfg, state, t, renotify_hours, force_notify)
         else:
-            log("%s: %s (変化なし)" % (name, status))
-            if status == IN_STOCK:
-                last = parse_iso(entry.get("last_notified"))
-                due = last is None or (now() - last) >= timedelta(hours=renotify_hours)
-                if due or force_notify:
-                    _send_restock(cfg, entry, name, url, repeat=True)
+            _check_product_page(cfg, state, t, renotify_hours, force_notify)
 
     _maybe_health_alert(cfg, state, err_threshold, health_cooldown)
     state["last_run"] = iso(now())

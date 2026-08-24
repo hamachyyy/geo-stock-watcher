@@ -386,6 +386,12 @@ td.ts{font-variant-numeric:tabular-nums;color:var(--muted)}
 .tag.t-github{border-color:var(--accent);color:var(--accent)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px}
 .d-in{background:var(--ok)} .d-out{background:var(--out)} .d-unk{background:var(--warn)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--line);
+ white-space:nowrap}
+.chip-in{background:var(--ok-bg);color:var(--ok);border-color:transparent;font-weight:650}
+.chip-out{color:var(--muted)}
+.chip-unk{background:var(--warn-bg);color:var(--warn);border-color:transparent}
 .empty{color:var(--muted);font-size:13px;background:var(--card);
  border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center}
 footer{margin-top:36px;color:var(--muted);font-size:12px;line-height:1.9}
@@ -416,11 +422,14 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
                  '（うち GitHub だけが捉えた変化 %d 件）</p>'
                  % (e(state.get("last_run") or "未実行"), len(ci_events), n_ci_new))
 
-    # 現在の状態
+    # 現在の状態（アウトレットは件数が多いので別セクションにする）
+    primary = {k: v for k, v in targets.items() if "#i_device=" not in k}
+    outlet = {k: v for k, v in targets.items() if "#i_device=" in k}
+
     parts.append('<div class="cards">')
-    if not targets:
+    if not primary:
         parts.append('<div class="empty">まだ一度もチェックしていません。</div>')
-    for url, t in targets.items():
+    for url, t in primary.items():
         st = t.get("status", "unknown")
         cls = {"in_stock": "b-in", "sold_out": "b-out"}.get(st, "b-unk")
         since = _parse(t.get("since"))
@@ -435,6 +444,25 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
                         e(t.get("last_checked") or "-"),
                         t.get("consecutive_errors", 0), e(url)))
     parts.append("</div>")
+
+    # アウトレット（訳アリ品・中古未使用品）はカードではなく一覧で見せる
+    if outlet:
+        # キーは "アウトレットURL#i_device=...&i_strage=..." の形なので '#' の前を取り出す
+        outlet_url = next(iter(outlet.keys())).split("#", 1)[0]
+        in_stock_items = [t for t in outlet.values() if t.get("status") == "in_stock"]
+        parts.append("<h2>アウトレット（訳アリ品・中古未使用品）</h2>")
+        parts.append('<p class="sub">%d 件中 <strong>%d 件が在庫あり</strong>／'
+                     '容量ごとに個別のバリアントとして監視しています／'
+                     '<a href="%s" target="_blank" rel="noopener">アウトレットページを開く</a></p>'
+                     % (len(outlet), len(in_stock_items), e(outlet_url)))
+        ordered = sorted(outlet.values(),
+                         key=lambda t: (t.get("status") != "in_stock", t.get("name", "")))
+        parts.append('<div class="chips">')
+        for t in ordered:
+            st = t.get("status", "unknown")
+            cls = {"in_stock": "chip-in", "sold_out": "chip-out"}.get(st, "chip-unk")
+            parts.append('<span class="chip %s">%s</span>' % (cls, e(t.get("name", "?"))))
+        parts.append("</div>")
 
     # 統計
     done = [w for w in windows if not w["ongoing"]]
@@ -482,7 +510,9 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
     mac_rows = read_recent_log(log_path)
     for r in mac_rows:
         r["source"] = "mac"
-    names = [t.get("name") for t in targets.values() if t.get("name")]
+    # アウトレットは件数が多く「最近のチェック」が埋まってしまうため対象外にする
+    names = [t.get("name") for k, t in targets.items()
+             if "#i_device=" not in k and t.get("name")]
     ci_rows = build_ci_check_rows(ci_runs, events, names)
     rows = sorted(mac_rows + ci_rows, key=lambda r: r["ts"], reverse=True)[:160]
 
