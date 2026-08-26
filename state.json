@@ -2,9 +2,9 @@
   "targets": {
     "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneXR_simfree": {
       "name": "iPhone XR (SIMフリー)",
-      "status": "sold_out",
-      "since": "2026-08-26 04:54:49",
-      "last_notified": "2026-08-25 22:15:50",
+      "status": "in_stock",
+      "since": "2026-08-26 11:44:15",
+      "last_notified": "2026-08-26 11:44:15",
       "consecutive_errors": 0
     },
     "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree": {
