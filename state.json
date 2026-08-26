@@ -58,8 +58,8 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=93&i_strage=128": {
       "name": "iPhone 12 mini 128GB（アウトレット）",
-      "status": "in_stock",
-      "since": "2026-08-26 10:32:01",
+      "status": "sold_out",
+      "since": "2026-08-26 10:34:14",
       "last_notified": "2026-08-26 10:32:01",
       "consecutive_errors": 0
     },
@@ -121,8 +121,8 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=108&i_strage=128": {
       "name": "iPhone 14 128GB（アウトレット）",
-      "status": "in_stock",
-      "since": "2026-08-26 10:32:01",
+      "status": "sold_out",
+      "since": "2026-08-26 10:34:14",
       "last_notified": "2026-08-26 10:32:02",
       "consecutive_errors": 0
     },
