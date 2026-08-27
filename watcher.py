@@ -543,6 +543,19 @@ def check_all(cfg, state, force_notify=False):
             _check_product_page(cfg, state, t, renotify_hours, force_notify)
 
     _maybe_health_alert(cfg, state, err_threshold, health_cooldown)
+
+    # 1 つでも正常に取れていれば「監視プロセスは生きている」とみなす。
+    # 個別ページの不調は _maybe_health_alert の担当なので、ここでは分ける。
+    healthy = any(e.get("consecutive_errors", 0) == 0
+                  for e in state.get("targets", {}).values())
+    ping_healthcheck(cfg, healthy)
+
+    if not os.environ.get("GITHUB_ACTIONS"):
+        # CI が自分の停止を検知することはできないので、手元からだけ見張る
+        _maybe_ci_stall_alert(cfg, state,
+                              float(cfg.get("ci_stall_alert_after_hours", 6)),
+                              float(cfg.get("ci_stall_alert_cooldown_hours", 12)))
+
     state["last_run"] = iso(now())
     return state
 
@@ -553,6 +566,72 @@ def _send_restock(cfg, entry, name, url, repeat=False):
     notify_ntfy(cfg, "%s %s" % (title, name), msg, click_url=url,
                 priority="urgent", tags="rotating_light,iphone")
     entry["last_notified"] = iso(now())
+
+
+def ping_healthcheck(cfg, healthy):
+    """外部の死活監視サービス（healthchecks.io など）に「生きている」と伝える。
+
+    この仕組みが必要な理由: 監視する側が死んだとき、自分で「死にました」と
+    通知することはできない。定期的な ping が途切れたことを外部に気づかせて、
+    向こうから警告してもらうしかない。2026-08-27 に GitHub Actions が
+    23 時間発火せず、こちらは 12 時間まったく気づけなかった。
+
+    URL 未設定なら何もしない（設定した瞬間から有効になる）。
+    """
+    url = (os.environ.get("HEALTHCHECK_URL", "").strip()
+           or (cfg.get("healthcheck_url") or "").strip())
+    if not url:
+        return
+    if not healthy:
+        url = url.rstrip("/") + "/fail"
+    try:
+        subprocess.run([CURL, "-sS", "-o", "/dev/null", "--max-time", "15",
+                        "--retry", "2", url],
+                       capture_output=True, timeout=45)
+    except Exception as e:  # noqa: BLE001
+        # ping が飛ばなくても在庫監視自体は続ける。失敗が続けば向こうが警告する。
+        log("死活 ping 失敗: %s" % e, "WARN")
+
+
+def _maybe_ci_stall_alert(cfg, state, max_idle_hours, cooldown_hours):
+    """GitHub Actions が動かなくなっていないか、手元から見張る。
+
+    GitHub のスケジュールは黙って止まる。CI 自身にこれを検知させることは
+    できないので、Mac 側から実行記録を見にいく。Mac は 85% 眠っているが、
+    数時間に一度起きれば足りる用途なのでこれで意味がある。
+    """
+    try:
+        import report
+        runs = report.load_ci_runs(BASE_DIR, limit=10)
+    except Exception as e:  # noqa: BLE001
+        log("CI 実行記録の取得に失敗: %s" % e, "WARN")
+        return
+    if not runs:
+        return
+    if any(r.get("status") == "in_progress" for r in runs):
+        state.pop("ci_stall_alert_at", None)
+        return
+
+    stamps = [t for t in ((r.get("end") or r.get("ts")) for r in runs) if t]
+    if not stamps:
+        return
+    latest = max(stamps)
+    idle_h = (now() - latest).total_seconds() / 3600.0
+    if idle_h < max_idle_hours:
+        state.pop("ci_stall_alert_at", None)
+        return
+
+    last = parse_iso(state.get("ci_stall_alert_at"))
+    if last is not None and (now() - last) < timedelta(hours=cooldown_hours):
+        return
+    log("GitHub Actions が %.1f 時間止まっています" % idle_h, "WARN")
+    notify_ntfy(cfg, "GitHub 側の監視が止まっています",
+                "最後の実行から %.1f 時間が経過しています（通常は常時稼働）。\n"
+                "この間、在庫復活を見逃している可能性があります。\n"
+                "手動で再開してください: gh workflow run watch.yml" % idle_h,
+                priority="high", tags="warning")
+    state["ci_stall_alert_at"] = iso(now())
+    record_history({"event": "ci_stall_alert", "idle_hours": round(idle_h, 1)})
 
 
 def _maybe_health_alert(cfg, state, threshold, cooldown_hours):

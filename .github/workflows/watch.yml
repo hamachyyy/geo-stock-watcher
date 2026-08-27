@@ -44,6 +44,8 @@ jobs:
       - name: 在庫を監視する
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          # 外部の死活監視。未設定なら watcher 側が黙って ping を飛ばさない
+          HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
           MODE: ${{ inputs.mode || 'loop' }}
           LOOP_MINUTES: ${{ inputs.loop_minutes || '330' }}
           INTERVAL_SECONDS: '120'

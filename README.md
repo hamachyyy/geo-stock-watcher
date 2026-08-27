@@ -209,6 +209,32 @@ ntfy への送信が 3 回失敗した場合のみ、保険として Mac のロ�
 
 ---
 
+## 監視が止まったことに気づく仕組み
+
+在庫の異常を通知する仕組みと、**仕組み自体が止まったことを通知する仕組み**は別物です。
+後者は自分では検知できない（死んだ側が「死にました」と言うことはできない）ので、
+外部に置いています。
+
+1. **外部のデッドマンスイッチ** — 1周ごとに `HEALTHCHECK_URL` へ ping を送ります。
+   ping が途切れると、向こうのサービスから警告が届きます。GitHub とも自宅とも
+   独立した場所にあるのが要点です。1つも取得できなかった周は `<URL>/fail` を
+   叩くので、「動いてはいるが何も取れていない」状態も拾えます。
+   URL 未設定なら何も送りません。
+
+   ```bash
+   gh secret set HEALTHCHECK_URL --body "https://hc-ping.com/<発行されたUUID>"
+   ```
+
+   ローカルにも効かせるなら `config.local.json` に `"healthcheck_url": "..."` を足します。
+
+2. **Mac から GitHub を見張る** — ローカル実行のたびに Actions の実行記録を確認し、
+   実行中が1つもなく最後の実行から6時間以上経っていたら通知します。
+   Mac は多くの時間眠っていますが、この用途は数時間に一度起きれば足ります。
+   CI 側では動かしません（自分の停止を自分で検知することはできないため）。
+
+2026-08-27 に GitHub のスケジュールが23時間発火せず、12時間まったく気づけなかった
+実例があります。詳細は `POSTMORTEM.md` の 4-2 を参照してください。
+
 ## 設定
 
 `config.json`（リポジトリに入る）と `config.local.json`（入らない）と環境変数を、
@@ -224,6 +250,9 @@ ntfy への送信が 3 回失敗した場合のみ、保険として Mac のロ�
 | `health_alert_after_errors` | 6 | 何回連続で判定不能なら警告を出すか |
 | `health_alert_cooldown_hours` | 12 | 警告通知の最短間隔 |
 | `mac_fallback_notification` | true | ntfy 失敗時に Mac 通知へ切り替えるか |
+| `healthcheck_url` | 空 | 死活監視への ping 先。環境変数 `HEALTHCHECK_URL` が優先。未設定なら送らない |
+| `ci_stall_alert_after_hours` | 6 | GitHub 側が何時間止まったら警告するか（Mac 実行時のみ） |
+| `ci_stall_alert_cooldown_hours` | 12 | その警告の最短間隔 |
 
 **監視対象を増やす**には `config.json` の `targets` に追記します。同じサイトの商品ページ
 なら何でも動きます。

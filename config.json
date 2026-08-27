@@ -24,5 +24,7 @@
   "renotify_hours": 6,
   "health_alert_after_errors": 6,
   "health_alert_cooldown_hours": 12,
-  "mac_fallback_notification": true
+  "mac_fallback_notification": true,
+  "ci_stall_alert_after_hours": 6,
+  "ci_stall_alert_cooldown_hours": 12
 }
