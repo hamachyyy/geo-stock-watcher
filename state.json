@@ -5,224 +5,256 @@
       "status": "sold_out",
       "since": "2026-08-26 12:06:03",
       "last_notified": "2026-08-26 11:44:15",
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree": {
       "name": "iPhone SE2 (SIMフリー)",
       "status": "sold_out",
       "since": "2026-08-26 15:17:13",
       "last_notified": "2026-08-26 15:01:46",
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=64": {
       "name": "iPhone 11 64GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=128": {
       "name": "iPhone 11 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=256": {
       "name": "iPhone 11 256GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=54&i_strage=64": {
       "name": "iPhone SE 第2世代 64GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=54&i_strage=128": {
       "name": "iPhone SE 第2世代 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=93&i_strage=64": {
       "name": "iPhone 12 mini 64GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=93&i_strage=128": {
       "name": "iPhone 12 mini 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-26 10:34:14",
       "last_notified": "2026-08-26 10:32:01",
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=93&i_strage=256": {
       "name": "iPhone 12 mini 256GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=88&i_strage=64": {
       "name": "iPhone SE 第3世代 64GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=88&i_strage=128": {
       "name": "iPhone SE 第3世代 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=12&i_strage=128": {
       "name": "iPhone XR 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=92&i_strage=64": {
       "name": "iPhone 12 64GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=92&i_strage=128": {
       "name": "iPhone 12 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=105&i_strage=128": {
       "name": "iPhone 13 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=97&i_strage=128": {
       "name": "iPhone 13 mini 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=108&i_strage=128": {
       "name": "iPhone 14 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-26 10:34:14",
       "last_notified": "2026-08-26 10:32:02",
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=103&i_strage=32": {
       "name": "iPad 第8世代 32GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=129&i_strage=64": {
       "name": "iPad 第9世代 64GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=107&i_strage=64": {
       "name": "iPad Air 第4世代 64GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=137&i_strage=": {
       "name": "Xperia 1 IV 256GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=152&i_strage=": {
       "name": "Xperia 1 V 256GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=146&i_strage=": {
       "name": "Xperia 5 IV 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=142&i_strage=": {
       "name": "Galaxy S23 SC-51D 256GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=156&i_strage=": {
       "name": "Galaxy S23 (純正パーツ交換品) 256GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=154&i_strage=": {
       "name": "Galaxy S23 Ultra 256GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=134&i_strage=": {
       "name": "Galaxy S24 256GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=113&i_strage=": {
       "name": "Google Pixel 7 Pro 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=118&i_strage=": {
       "name": "Google Pixel 8 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=112&i_strage=": {
       "name": "Google Pixel 8a 128GB（アウトレット）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=143&i_strage=": {
       "name": "Galaxy A25 5G（中古未使用品）",
       "status": "sold_out",
       "since": "2026-08-24 18:32:53",
       "last_notified": null,
-      "consecutive_errors": 0
+      "consecutive_errors": 0,
+      "last_error": null
     }
   },
   "last_health_alert": "2026-08-26 12:26:55"
