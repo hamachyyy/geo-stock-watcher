@@ -431,6 +431,7 @@ def _update_entry(cfg, state, key, name, url, status, err, renotify_hours,
     if status is None:
         entry["consecutive_errors"] = entry.get("consecutive_errors", 0) + 1
         entry["last_checked"] = iso(now())
+        entry["last_error"] = err
         log("%s: 取得失敗 (%s) 連続%d回目" % (name, err, entry["consecutive_errors"]),
             "WARN")
         return
@@ -439,11 +440,13 @@ def _update_entry(cfg, state, key, name, url, status, err, renotify_hours,
 
     if status == UNKNOWN:
         entry["consecutive_errors"] = entry.get("consecutive_errors", 0) + 1
+        entry["last_error"] = "判定不能（ページ構造が想定外）"
         log("%s: 判定不能 (ページ構造が想定外) 連続%d回目"
             % (name, entry["consecutive_errors"]), "WARN")
         return
 
     entry["consecutive_errors"] = 0
+    entry["last_error"] = None
     prev = entry.get("status", UNKNOWN)
 
     if status != prev:
@@ -561,9 +564,15 @@ def _maybe_health_alert(cfg, state, threshold, cooldown_hours):
     if last is not None and (now() - last) < timedelta(hours=cooldown_hours):
         return
     names = "、".join(e.get("name", "?") for e in broken)
+    # どこで・何回・何が起きているかを本文に出す。ログを見に行かなくても
+    # 通知だけで「サイト側の障害か・こちらの不具合か」の見当がつくようにするため。
+    detail = "\n".join(
+        "%s: %s が%d回連続"
+        % (e.get("name", "?"), e.get("last_error") or "エラー",
+           e.get("consecutive_errors", 0))
+        for e in broken)
     notify_ntfy(cfg, "監視が止まっている可能性",
-                "%s のページを %d 回連続で判定できませんでした。"
-                "サイト構造の変更かネットワーク障害の可能性があります。" % (names, threshold),
+                "%s\n\nサイト構造の変更かネットワーク障害の可能性があります。" % detail,
                 priority="high", tags="warning")
     state["last_health_alert"] = iso(now())
     record_history({"event": "health_alert", "name": names,
