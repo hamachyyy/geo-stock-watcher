@@ -228,6 +228,70 @@ http://127.0.0.1:8787/
 サーバーは `127.0.0.1` にだけ束縛しているので、同じ Wi-Fi の他の端末からは繋がりません。
 ポートを変えるなら `./install.sh 300 9999` のように第2引数で指定します。
 
+## 実行を外部から起こす（cron-job.org）
+
+GitHub の `schedule:` は当てにならない。実測で **34時間まったく発火しない**ことがあり、
+5.5時間ループが終わっても次が起動せず、3回続けて監視が途切れた。
+
+一方 `workflow_dispatch`（手動起動と同じ口）は**間引かれない**。実測でいずれも
+数秒でキューに入っている。そこで、起動だけを外部の cron から叩く。
+
+### 1. トークンを作る（GitHub）
+
+Settings → Developer settings → **Fine-grained personal access tokens** → Generate new token
+
+| 項目 | 値 |
+|---|---|
+| Repository access | Only select repositories → `geo-stock-watcher` **だけ** |
+| Permissions | **Actions: Read and write** のみ（他は触らない） |
+| Expiration | 最長1年 |
+
+`contents` は不要。この権限では push できないので、漏れても
+ワークフロー定義を書き換えて Secrets を抜くことはできない。
+実害は「このワークフローを起動される」程度に限られる。
+
+**失効に注意。** 期限が切れると POST が 401 を返し続け、また静かに止まる。
+デッドマンスイッチが2時間以内に知らせてくれるが、失効日はカレンダーに入れておく。
+
+### 2. cron-job.org に登録する
+
+| 項目 | 値 |
+|---|---|
+| URL | `https://api.github.com/repos/hamachyyy/geo-stock-watcher/actions/workflows/watch.yml/dispatches` |
+| Method | `POST` |
+| Schedule | **毎時0分**（1日24回） |
+| Header | `Authorization: Bearer <トークン>` |
+| Header | `Accept: application/vnd.github+json` |
+| Header | `Content-Type: application/json` |
+| Body | `{"ref":"main","inputs":{"mode":"loop","loop_minutes":"330"}}` |
+
+**成功時の応答は `204 No Content`** で、本文は空。cron-job.org 側で
+「2xx を成功とみなす」設定にしておく。
+
+### なぜ毎時なのか
+
+ループは5.5時間走る。その間に届いた起動は concurrency の待機枠に入り、
+**枠は1つしか保持されない**ので、毎時叩いても待機分が入れ替わるだけで無駄にはならない。
+そして実行が終わった瞬間、待機していた分が走り出す（実測で**引き継ぎ4秒**）。
+
+つまり毎時叩いておけば、常に次の1本が控えている状態になり、隙間が消える。
+5分おきに叩いても結果は同じで、記録が増えるだけ。
+
+### 打ち切られた実行が大量に出るが、異常ではない
+
+待機枠が入れ替わるたび、前に待っていた実行は `cancelled` で終わる。
+1日20本以上出るが、これは設計どおりの動作。履歴ページでは失敗として扱わない。
+
+### 動作確認
+
+トークンを手元で試すなら（`<トークン>` は自分で置き換える）:
+
+```bash
+curl -i -X POST -H "Authorization: Bearer <トークン>" -H "Accept: application/vnd.github+json" -d '{"ref":"main"}' https://api.github.com/repos/hamachyyy/geo-stock-watcher/actions/workflows/watch.yml/dispatches
+```
+
+`HTTP/2 204` が返れば成功。`401` はトークンが無効、`403` は権限不足。
+
 ## 監視が止まったことに気づく仕組み
 
 在庫の異常を通知する仕組みと、**仕組み自体が止まったことを通知する仕組み**は別物です。

@@ -270,6 +270,12 @@ def build_ci_check_rows(runs, events, names):
                                         "waiting", "pending")
         if not running and run.get("status") != "completed":
             continue
+        # cancelled は失敗ではない。concurrency の待機枠は 1 つしか保持されないので、
+        # 実行中に新しい起動が来ると、待っていた方が打ち切られる。これは正常な動作で、
+        # 外部から毎時 dispatch するとむしろ大量に出る。失敗として並べると履歴が
+        # 埋まって本物の失敗が見えなくなるため、除く。
+        if not running and run.get("conclusion") == "cancelled":
+            continue
         if not running and run.get("conclusion") != "success":
             rows.append({"ts": run["ts"].strftime(TS_FMT), "source": "github",
                          "status": None,
