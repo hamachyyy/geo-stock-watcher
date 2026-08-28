@@ -5,8 +5,8 @@
       "status": "sold_out",
       "since": "2026-08-28 19:31:07",
       "last_notified": "2026-08-28 19:22:26",
-      "consecutive_errors": 1,
-      "last_error": "HTTP 500"
+      "consecutive_errors": 0,
+      "last_error": null
     },
     "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree": {
       "name": "iPhone SE2 (SIMフリー)",
@@ -98,8 +98,8 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=12&i_strage=128": {
       "name": "iPhone XR 128GB（アウトレット）",
-      "status": "in_stock",
-      "since": "2026-08-28 19:55:27",
+      "status": "sold_out",
+      "since": "2026-08-28 19:57:41",
       "last_notified": "2026-08-28 19:55:28",
       "consecutive_errors": 0,
       "last_error": null
