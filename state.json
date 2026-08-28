@@ -154,9 +154,9 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=129&i_strage=64": {
       "name": "iPad 第9世代 64GB（アウトレット）",
-      "status": "sold_out",
-      "since": "2026-08-24 18:32:53",
-      "last_notified": null,
+      "status": "in_stock",
+      "since": "2026-08-28 14:19:22",
+      "last_notified": "2026-08-28 14:19:22",
       "consecutive_errors": 0,
       "last_error": null
     },
