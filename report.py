@@ -357,6 +357,13 @@ h2{font-size:15px;margin:34px 0 12px;color:var(--muted);font-weight:600;
 .b-out{background:var(--out-bg);color:var(--out)}
 .b-unk{background:var(--warn-bg);color:var(--warn)}
 .meta{font-size:12px;color:var(--muted);margin-top:10px}
+.actions{display:flex;align-items:center;gap:12px;margin:0 0 24px;flex-wrap:wrap}
+.actions button{font:inherit;font-size:13px;font-weight:600;padding:8px 16px;
+ border-radius:8px;border:1px solid var(--line);background:var(--card);
+ color:var(--accent);cursor:pointer;transition:border-color .15s}
+.actions button:hover:not(:disabled){border-color:var(--accent)}
+.actions button:disabled{opacity:.55;cursor:default}
+.hint{font-size:12px;color:var(--muted)}
 .meta a{color:var(--accent);text-decoration:none}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;
@@ -421,6 +428,12 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
                  '手元の Mac の記録と GitHub Actions の記録（%d 件）を統合しています'
                  '（うち GitHub だけが捉えた変化 %d 件）</p>'
                  % (e(state.get("last_run") or "未実行"), len(ci_events), n_ci_new))
+
+    # localhost 経由で開いているときだけ押せる。file:// ではブラウザが
+    # コマンドを実行できないため、その旨を出して無効にする（serve.py 参照）。
+    parts.append('<div class="actions">'
+                 '<button id="recheck" type="button">いま確認する</button>'
+                 '<span id="recheck-msg" class="hint"></span></div>')
 
     # 現在の状態（アウトレットは件数が多いので別セクションにする）
     primary = {k: v for k, v in targets.items() if "#i_device=" not in k}
@@ -553,14 +566,41 @@ def write_report(cfg, state, history, path, log_path=None, now=None):
                  "の有無で判定しています。<br>"
                  "取得できなかった場合や想定外のページだった場合は「判定不能」として扱い、"
                  "通知は送りません。<br>"
-                 "このファイルは watcher.py が実行されるたびに作り直されます。</footer>")
+                 "このファイルは watcher.py が実行されるたびに作り直されます。<br>"
+                 "http://127.0.0.1:8787/ で開くと、その場で再確認できます"
+                 "（serve.py が動いているとき）。</footer>")
     parts.append("</div>")
 
+    # meta refresh だと確認中に割り込んで画面が巻き戻るので、JS で止められる形にする
+    script = """
+(function(){
+  var btn=document.getElementById('recheck'),msg=document.getElementById('recheck-msg');
+  var timer=setTimeout(function(){location.reload();},60000);
+  if(!btn){return;}
+  if(location.protocol!=='http:'&&location.protocol!=='https:'){
+    btn.disabled=true;
+    msg.textContent='http://127.0.0.1:8787/ で開くと押せます';
+    return;
+  }
+  btn.addEventListener('click',function(){
+    clearTimeout(timer);
+    btn.disabled=true;var label=btn.textContent;btn.textContent='確認中…';msg.textContent='';
+    fetch('/refresh',{method:'POST'}).then(function(r){
+      if(r.ok){location.reload();return;}
+      return r.text().then(function(t){throw new Error(t||('HTTP '+r.status));});
+    }).catch(function(err){
+      btn.disabled=false;btn.textContent=label;
+      msg.textContent='失敗: '+err.message;
+      timer=setTimeout(function(){location.reload();},60000);
+    });
+  });
+})();
+"""
     doc = ('<!doctype html><html lang="ja"><head><meta charset="utf-8">'
            '<meta name="viewport" content="width=device-width,initial-scale=1">'
-           '<meta http-equiv="refresh" content="60">'
-           "<title>在庫判定履歴</title><style>%s</style></head><body>%s</body></html>"
-           % (CSS, "".join(parts)))
+           "<title>在庫判定履歴</title><style>%s</style></head><body>%s"
+           "<script>%s</script></body></html>"
+           % (CSS, "".join(parts), script))
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(doc)
