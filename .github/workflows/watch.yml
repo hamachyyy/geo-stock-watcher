@@ -46,6 +46,10 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           # 外部の死活監視。未設定なら watcher 側が黙って ping を飛ばさない
           HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
+          # 次の実行を自分で起こすためのトークン。未設定なら連鎖しない。
+          # 既定の GITHUB_TOKEN では新しい実行を起こせない仕様のため別途必要。
+          DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+          REPO: ${{ github.repository }}
           MODE: ${{ inputs.mode || 'loop' }}
           LOOP_MINUTES: ${{ inputs.loop_minutes || '330' }}
           INTERVAL_SECONDS: '120'
@@ -88,7 +92,8 @@ jobs:
           python3 watcher.py --once --durable-state || exit $?
           persist
 
-          END=$(( $(date +%s) + LOOP_MINUTES * 60 ))
+          START_TS=$(date +%s)
+          END=$(( START_TS + LOOP_MINUTES * 60 ))
           n=1
           while true; do
             REMAIN=$(( END - $(date +%s) ))
@@ -102,3 +107,30 @@ jobs:
             persist
           done
           echo "ループ終了: ${n} 回チェックしました（約 ${LOOP_MINUTES} 分）"
+
+          # 次の実行を自分で起こす。
+          # schedule: は実測で 34 時間発火しないことがあり、5.5 時間ループの
+          # 終わりを引き継げない事例が 3 回続いた。workflow_dispatch は
+          # 間引かれないので、こちらで繋ぐ。
+          #
+          # 短時間で終わったときは起こさない。起動直後に落ちる不具合が入ると、
+          # 失敗と再起動を延々と繰り返してしまうため。
+          ELAPSED_MIN=$(( ( $(date +%s) - START_TS ) / 60 ))
+          MIN_MIN=$(( LOOP_MINUTES * 8 / 10 ))
+          if [ -z "${DISPATCH_TOKEN:-}" ]; then
+            echo "DISPATCH_TOKEN 未設定のため次の実行は起こしません"
+          elif [ "$ELAPSED_MIN" -lt "$MIN_MIN" ]; then
+            echo "実行が短すぎます（${ELAPSED_MIN}分 < ${MIN_MIN}分）。暴走を避けるため連鎖しません"
+          else
+            CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $DISPATCH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -d "{\"ref\":\"main\",\"inputs\":{\"mode\":\"loop\",\"loop_minutes\":\"${LOOP_MINUTES}\"}}" \
+              "https://api.github.com/repos/${REPO}/actions/workflows/watch.yml/dispatches" \
+              || echo "000")
+            if [ "$CODE" = "204" ]; then
+              echo "次の実行を起こしました"
+            else
+              echo "::warning::次の実行を起こせませんでした（HTTP ${CODE}）。トークンの失効かもしれません"
+            fi
+          fi

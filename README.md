@@ -228,69 +228,88 @@ http://127.0.0.1:8787/
 サーバーは `127.0.0.1` にだけ束縛しているので、同じ Wi-Fi の他の端末からは繋がりません。
 ポートを変えるなら `./install.sh 300 9999` のように第2引数で指定します。
 
-## 実行を外部から起こす（cron-job.org）
+## 実行を次に繋ぐ（2段構え）
 
 GitHub の `schedule:` は当てにならない。実測で **34時間まったく発火しない**ことがあり、
-5.5時間ループが終わっても次が起動せず、3回続けて監視が途切れた。
+5.5時間ループが終わっても次が起動せず、**3回続けて監視が途切れた**。
 
 一方 `workflow_dispatch`（手動起動と同じ口）は**間引かれない**。実測でいずれも
-数秒でキューに入っている。そこで、起動だけを外部の cron から叩く。
+数秒でキューに入っている。そこで起動を dispatch に寄せる。
 
-### 1. トークンを作る（GitHub）
+| | 役割 | 必要なもの |
+|---|---|---|
+| **A. 自己連鎖** | ループの最後に自分で次を起こす | Secrets に `DISPATCH_TOKEN` |
+| **B. 外部 cron** | 連鎖が切れたときに拾い直す | cron-job.org のアカウント |
 
-Settings → Developer settings → **Fine-grained personal access tokens** → Generate new token
+A だけでも隙間は消えるが、**連鎖が一度切れると自力では戻れない**
+（実行が打ち切られた・失敗した場合）。B はそこを埋める保険。
+どちらも入っていなくてもデッドマンスイッチが2時間以内に知らせる。
+
+### 共通: トークンを作る
+
+GitHub → Settings → Developer settings → **Fine-grained personal access tokens**
+→ Generate new token
 
 | 項目 | 値 |
 |---|---|
 | Repository access | Only select repositories → `geo-stock-watcher` **だけ** |
-| Permissions | **Actions: Read and write** のみ（他は触らない） |
+| Permissions | **Actions: Read and write** のみ |
 | Expiration | 最長1年 |
 
-`contents` は不要。この権限では push できないので、漏れても
-ワークフロー定義を書き換えて Secrets を抜くことはできない。
-実害は「このワークフローを起動される」程度に限られる。
+`contents` は不要。この権限では push できないので、漏れてもワークフロー定義を
+書き換えて Secrets を抜くことはできない。実害は「起動される」程度に限られる。
 
-**失効に注意。** 期限が切れると POST が 401 を返し続け、また静かに止まる。
-デッドマンスイッチが2時間以内に知らせてくれるが、失効日はカレンダーに入れておく。
+**失効に注意。** 期限が切れると 401 を返し続け、また静かに止まる。
+ワークフローのログに `::warning::次の実行を起こせませんでした（HTTP 401）` が出る。
+失効日はカレンダーに入れておく。
 
-### 2. cron-job.org に登録する
+### A. 自己連鎖（コマンド1つ）
+
+```bash
+gh secret set DISPATCH_TOKEN
+```
+
+対話で貼り付けを求められるので、そこにトークンを入れる。
+登録すると、ループが最後まで走りきったときだけ次の実行を起こすようになる。
+
+短時間で終わった実行（ループ長の8割未満）では連鎖しない。起動直後に落ちる
+不具合が入ったときに、失敗と再起動を延々と繰り返さないため。
+
+### B. 外部 cron（cron-job.org）
+
+新規ジョブを作り、**ADVANCED（詳細）タブ**を開く。メソッド・ヘッダ・本文は
+基本タブには無く、ここにある。
 
 | 項目 | 値 |
 |---|---|
 | URL | `https://api.github.com/repos/hamachyyy/geo-stock-watcher/actions/workflows/watch.yml/dispatches` |
-| Method | `POST` |
 | Schedule | **毎時0分**（1日24回） |
-| Header | `Authorization: Bearer <トークン>` |
-| Header | `Accept: application/vnd.github+json` |
-| Header | `Content-Type: application/json` |
-| Body | `{"ref":"main","inputs":{"mode":"loop","loop_minutes":"330"}}` |
+| Request method | `POST` |
+| Header | `Authorization` : `Bearer <トークン>` |
+| Header | `Accept` : `application/vnd.github+json` |
+| Header | `Content-Type` : `application/json` |
+| Request body | `{"ref":"main","inputs":{"mode":"loop","loop_minutes":"330"}}` |
 
-**成功時の応答は `204 No Content`** で、本文は空。cron-job.org 側で
-「2xx を成功とみなす」設定にしておく。
+成功時の応答は **`204 No Content`**（本文は空）。2xx を成功とみなす設定にする。
 
 ### なぜ毎時なのか
 
 ループは5.5時間走る。その間に届いた起動は concurrency の待機枠に入り、
-**枠は1つしか保持されない**ので、毎時叩いても待機分が入れ替わるだけで無駄にはならない。
-そして実行が終わった瞬間、待機していた分が走り出す（実測で**引き継ぎ4秒**）。
-
-つまり毎時叩いておけば、常に次の1本が控えている状態になり、隙間が消える。
-5分おきに叩いても結果は同じで、記録が増えるだけ。
+**枠は1つしか保持されない**ので、毎時叩いても待機分が入れ替わるだけで無駄にならない。
+実行が終わった瞬間、待機していた分が走り出す（実測で**引き継ぎ4秒**）。
 
 ### 打ち切られた実行が大量に出るが、異常ではない
 
 待機枠が入れ替わるたび、前に待っていた実行は `cancelled` で終わる。
-1日20本以上出るが、これは設計どおりの動作。履歴ページでは失敗として扱わない。
+1日20本以上出るが設計どおり。履歴ページでは失敗として扱わない。
 
 ### 動作確認
-
-トークンを手元で試すなら（`<トークン>` は自分で置き換える）:
 
 ```bash
 curl -i -X POST -H "Authorization: Bearer <トークン>" -H "Accept: application/vnd.github+json" -d '{"ref":"main"}' https://api.github.com/repos/hamachyyy/geo-stock-watcher/actions/workflows/watch.yml/dispatches
 ```
 
-`HTTP/2 204` が返れば成功。`401` はトークンが無効、`403` は権限不足。
+`HTTP/2 204` なら成功。`401` はトークンが無効、`403` は権限不足。
 
 ## 監視が止まったことに気づく仕組み
 
