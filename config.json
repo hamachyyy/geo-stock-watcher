@@ -29,7 +29,7 @@
       "follow_redirects": true
     }
   ],
-  "renotify_hours": 6,
+  "renotify_hours": 0.25,
   "health_alert_after_errors": 6,
   "health_alert_cooldown_hours": 12,
   "mac_fallback_notification": true,
