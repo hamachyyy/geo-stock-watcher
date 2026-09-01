@@ -19,6 +19,14 @@
       "name": "アウトレット（訳アリ品・中古未使用品）",
       "type": "outlet_listing",
       "url": "https://mvno.geo-mobile.jp/outlet/"
+    },
+    {
+      "name": "nubia Fold（Y!mobile）",
+      "url": "https://order.ymobile.jp/store/CHDO0001/entry/nubia_fold/device?md=nubia_fold&contract=c02",
+      "title_contains": "nubia Fold",
+      "sentinel": "id=\"plan-next-button\"",
+      "sold_out_markers": ["ただいまご利用いただけません"],
+      "follow_redirects": true
     }
   ],
   "renotify_hours": 6,

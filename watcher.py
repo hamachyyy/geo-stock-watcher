@@ -187,13 +187,19 @@ def save_json(path, data):
 
 # --------------------------------------------------------------------------- fetch
 
-def fetch(url, timeout=30, retries=3):
-    """curl でページを取得する。(html, error) を返す。"""
+def fetch(url, timeout=30, retries=3, follow_redirects=False):
+    """curl でページを取得する。(html, error) を返す。
+
+    follow_redirects=True のときは 3xx を追従する（注文フロー等、正規ページに
+    到達する前に一旦別URLへ飛ばすサイト向け）。既定は追従しない。
+    """
     last_err = None
     for attempt in range(1, retries + 1):
         cmd = [CURL, "-sS", "--compressed", "--http2",
                "--max-time", str(timeout),
                "-w", "\n__HTTP_STATUS__%{http_code}"]
+        if follow_redirects:
+            cmd += ["-L", "--max-redirs", "10"]
         for h in BROWSER_HEADERS:
             cmd += ["-H", h]
         cmd.append(url)
@@ -217,7 +223,8 @@ def fetch(url, timeout=30, retries=3):
     return None, last_err
 
 
-def classify(html, sentinel=DEFAULT_SENTINEL, title_contains=None):
+def classify(html, sentinel=DEFAULT_SENTINEL, title_contains=None,
+             sold_out_markers=None):
     """ページ HTML から在庫状態を判定する。
 
     在庫切れは <section id="js-soldout"> の有無で判定する。ただし「無い＝在庫あり」は
@@ -237,7 +244,7 @@ def classify(html, sentinel=DEFAULT_SENTINEL, title_contains=None):
         if not m or title_contains not in m.group(1):
             # 別ページへリダイレクトされている可能性。
             return UNKNOWN
-    for marker in SOLD_OUT_MARKERS:
+    for marker in (sold_out_markers or SOLD_OUT_MARKERS):
         if marker in html:
             return SOLD_OUT
     return IN_STOCK
@@ -476,14 +483,16 @@ def _check_product_page(cfg, state, t, renotify_hours, force_notify):
     name = t.get("name", url.rsplit("/", 1)[-1])
     sentinel = t.get("sentinel", DEFAULT_SENTINEL)
     title_contains = t.get("title_contains")
+    sold_out_markers = t.get("sold_out_markers")  # 対象別に上書き（無ければ既定）
+    follow_redirects = bool(t.get("follow_redirects", False))
 
-    html, err = fetch(url)
+    html, err = fetch(url, follow_redirects=follow_redirects)
     if html is None:
         _update_entry(cfg, state, url, name, url, None, err, renotify_hours,
                       force_notify)
         return
 
-    status = classify(html, sentinel, title_contains)
+    status = classify(html, sentinel, title_contains, sold_out_markers)
     _update_entry(cfg, state, url, name, url, status, None, renotify_hours,
                   force_notify)
 
