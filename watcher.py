@@ -452,6 +452,7 @@ def _update_entry(cfg, state, key, name, url, status, err, renotify_hours,
             % (name, entry["consecutive_errors"]), "WARN")
         return
 
+    prior_errors = entry.get("consecutive_errors", 0)
     entry["consecutive_errors"] = 0
     entry["last_error"] = None
     prev = entry.get("status", UNKNOWN)
@@ -472,9 +473,19 @@ def _update_entry(cfg, state, key, name, url, status, err, renotify_hours,
         if not quiet:
             log("%s: %s (変化なし)" % (name, status))
         if status == IN_STOCK:
+            # 長いエラー連続の明けに在庫ありへ復帰したら、弱い「継続中」ではなく
+            # 新規の「在庫復活！」として鳴らす。ページが長時間落ちていた＝いま
+            # 開けて買える合図。エラー自体では在庫切れ判定しない（誤検知ゼロを維持）。
+            recovered = prior_errors >= int(cfg.get("fresh_restock_after_errors", 6))
             last = parse_iso(entry.get("last_notified"))
             due = last is None or (now() - last) >= timedelta(hours=renotify_hours)
-            if due or force_notify:
+            if recovered:
+                log("%s: 長期エラー(%d回)明けの在庫あり → 新規『在庫復活！』として通知"
+                    % (name, prior_errors))
+                record_history({"event": "recover_from_error", "name": name,
+                                "url": url, "error_streak": prior_errors})
+                _send_restock(cfg, entry, name, url)
+            elif due or force_notify:
                 _send_restock(cfg, entry, name, url, repeat=True)
 
 

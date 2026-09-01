@@ -30,6 +30,7 @@
     }
   ],
   "renotify_hours": 0.25,
+  "fresh_restock_after_errors": 6,
   "health_alert_after_errors": 6,
   "health_alert_cooldown_hours": 12,
   "mac_fallback_notification": true,
