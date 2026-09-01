@@ -13,7 +13,7 @@
       "status": "in_stock",
       "since": "2026-08-30 18:01:10",
       "last_notified": "2026-09-01 20:09:32",
-      "consecutive_errors": 85,
+      "consecutive_errors": 86,
       "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=64": {
