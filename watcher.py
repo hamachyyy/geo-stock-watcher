@@ -365,8 +365,22 @@ def _encode_header(value):
         return "=?UTF-8?B?%s?=" % b64
 
 
+def _source_label(cfg):
+    """通知の送信元（Mac / GitHub）を返す。
+
+    Mac と GitHub Actions が同じ ntfy トピックに独立して通知するため、同じ
+    出来事が時間差で二重に鳴る。どちらが鳴らしたのか一目で分かるようにする。
+    """
+    override = (os.environ.get("GEOWATCH_SOURCE", "").strip()
+                or (cfg.get("source_label") or "").strip())
+    if override:
+        return override
+    return "GitHub" if os.environ.get("GITHUB_ACTIONS") else "Mac"
+
+
 def notify_ntfy(cfg, title, message, click_url=None, priority="urgent",
                 tags="rotating_light"):
+    title = "[%s] %s" % (_source_label(cfg), title)
     topic = (cfg.get("ntfy", {}) or {}).get("topic", "").strip()
     if not topic:
         log("ntfy topic が未設定のため通知できません", "ERROR")
