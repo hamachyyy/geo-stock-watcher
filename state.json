@@ -13,8 +13,8 @@
       "status": "sold_out",
       "since": "2026-09-02 10:41:49",
       "last_notified": "2026-09-01 20:09:32",
-      "consecutive_errors": 0,
-      "last_error": null
+      "consecutive_errors": 1,
+      "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=64": {
       "name": "iPhone 11 64GB（アウトレット）",
@@ -50,9 +50,9 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=54&i_strage=128": {
       "name": "iPhone SE 第2世代 128GB（アウトレット）",
-      "status": "sold_out",
-      "since": "2026-08-24 18:32:53",
-      "last_notified": null,
+      "status": "in_stock",
+      "since": "2026-09-02 11:08:47",
+      "last_notified": "2026-09-02 11:08:47",
       "consecutive_errors": 0,
       "last_error": null
     },
