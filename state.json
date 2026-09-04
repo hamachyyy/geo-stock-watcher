@@ -114,8 +114,8 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=92&i_strage=128": {
       "name": "iPhone 12 128GB（アウトレット）",
-      "status": "in_stock",
-      "since": "2026-09-04 15:03:26",
+      "status": "sold_out",
+      "since": "2026-09-04 15:05:40",
       "last_notified": "2026-09-04 15:03:27",
       "consecutive_errors": 0,
       "last_error": null
@@ -146,8 +146,8 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=103&i_strage=32": {
       "name": "iPad 第8世代 32GB（アウトレット）",
-      "status": "in_stock",
-      "since": "2026-09-04 15:03:27",
+      "status": "sold_out",
+      "since": "2026-09-04 15:05:40",
       "last_notified": "2026-09-04 15:03:27",
       "consecutive_errors": 0,
       "last_error": null
