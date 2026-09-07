@@ -194,8 +194,8 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=142&i_strage=": {
       "name": "Galaxy S23 SC-51D 256GB（アウトレット）",
-      "status": "in_stock",
-      "since": "2026-09-07 17:35:00",
+      "status": "sold_out",
+      "since": "2026-09-07 17:37:16",
       "last_notified": "2026-09-07 17:35:00",
       "consecutive_errors": 0,
       "last_error": null
@@ -218,8 +218,8 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=134&i_strage=": {
       "name": "Galaxy S24 256GB（アウトレット）",
-      "status": "in_stock",
-      "since": "2026-09-07 17:35:00",
+      "status": "sold_out",
+      "since": "2026-09-07 17:37:16",
       "last_notified": "2026-09-07 17:35:00",
       "consecutive_errors": 0,
       "last_error": null
