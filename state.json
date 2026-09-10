@@ -255,14 +255,6 @@
       "last_notified": null,
       "consecutive_errors": 0,
       "last_error": null
-    },
-    "https://order.ymobile.jp/store/CHDO0001/entry/nubia_fold/device?md=nubia_fold&contract=c02": {
-      "name": "nubia Fold（Y!mobile）",
-      "status": "sold_out",
-      "since": "2026-09-01 09:06:14",
-      "last_notified": null,
-      "consecutive_errors": 0,
-      "last_error": null
     }
   },
   "last_health_alert": "2026-09-02 09:43:06"
