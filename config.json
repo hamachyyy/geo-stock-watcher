@@ -25,11 +25,14 @@
       "url": "https://order.ymobile.jp/store/CHDO0001/entry/nubia_fold/device?md=nubia_fold&contract=c02",
       "title_contains": "nubia Fold",
       "sentinel": "id=\"plan-next-button\"",
-      "sold_out_markers": ["ただいまご利用いただけません"],
+      "sold_out_markers": [
+        "ただいまご利用いただけません"
+      ],
       "follow_redirects": true
     }
   ],
   "renotify_hours": 0.25,
+  "apply_anchor": "#js-detail_form",
   "fresh_restock_after_errors": 6,
   "health_alert_after_errors": 6,
   "health_alert_cooldown_hours": 12,

@@ -594,10 +594,28 @@ def check_all(cfg, state, force_notify=False):
     return state
 
 
+def _apply_link(cfg, url):
+    """通知タップ時に開く URL。申込フォームの位置へ直接着地させる。
+
+    在庫は数分で消えるため、ページ先頭から申込欄まで手でスクロールする時間が
+    惜しい。商品ページには id="js-detail_form" の申込フォームがあるので、その
+    アンカーを付けて開く。申込自体は POST（GET /order は 404）なので、これが
+    GET で到達できる一番奥になる。
+
+    アウトレット一覧（既にフラグメントで機種を指定している）や、別ドメインの
+    申込ページは構造が違うため触らない。
+    """
+    anchor = (cfg.get("apply_anchor") or "").strip()
+    if anchor and "/uqmobile/smartphone/" in url and "#" not in url:
+        return url + anchor
+    return url
+
+
 def _send_restock(cfg, entry, name, url, repeat=False):
     title = "在庫復活" + ("（継続中）" if repeat else "！")
-    msg = "%s が購入可能になっています。\n%s" % (name, url)
-    notify_ntfy(cfg, "%s %s" % (title, name), msg, click_url=url,
+    link = _apply_link(cfg, url)
+    msg = "%s が購入可能になっています。\n%s" % (name, link)
+    notify_ntfy(cfg, "%s %s" % (title, name), msg, click_url=link,
                 priority="urgent", tags="rotating_light,iphone")
     entry["last_notified"] = iso(now())
 
