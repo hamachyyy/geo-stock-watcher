@@ -21,6 +21,10 @@ on:
         description: 'ループする分数（loop のとき）'
         type: string
         default: '330'
+      interval_seconds:
+        description: 'チェック間隔の秒数（短いほど早く気づくが、403 で弾かれやすくなる）'
+        type: string
+        default: '45'
 
 permissions:
   contents: write
@@ -52,7 +56,7 @@ jobs:
           REPO: ${{ github.repository }}
           MODE: ${{ inputs.mode || 'loop' }}
           LOOP_MINUTES: ${{ inputs.loop_minutes || '330' }}
-          INTERVAL_SECONDS: '120'
+          INTERVAL_SECONDS: ${{ inputs.interval_seconds || '45' }}
         run: |
           set -uo pipefail
 
@@ -100,7 +104,8 @@ jobs:
             if [ "$REMAIN" -lt "$INTERVAL_SECONDS" ]; then
               break
             fi
-            sleep "$INTERVAL_SECONDS"
+            # 等間隔の連打は機械的で弾かれやすいため ±20% ゆらす
+            sleep $(( INTERVAL_SECONDS * (80 + RANDOM % 41) / 100 ))
             n=$(( n + 1 ))
             # 一時的な取得失敗でループ全体を止めない
             python3 watcher.py --once --durable-state || echo "この回は失敗（継続します）"
@@ -125,7 +130,7 @@ jobs:
             CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
               -H "Authorization: Bearer $DISPATCH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              -d "{\"ref\":\"main\",\"inputs\":{\"mode\":\"loop\",\"loop_minutes\":\"${LOOP_MINUTES}\"}}" \
+              -d "{\"ref\":\"main\",\"inputs\":{\"mode\":\"loop\",\"loop_minutes\":\"${LOOP_MINUTES}\",\"interval_seconds\":\"${INTERVAL_SECONDS}\"}}" \
               "https://api.github.com/repos/${REPO}/actions/workflows/watch.yml/dispatches" \
               || echo "000")
             if [ "$CODE" = "204" ]; then
