@@ -186,8 +186,8 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=146&i_strage=": {
       "name": "Xperia 5 IV 128GB（アウトレット）",
-      "status": "in_stock",
-      "since": "2026-09-11 09:24:34",
+      "status": "sold_out",
+      "since": "2026-09-11 09:25:27",
       "last_notified": "2026-09-11 09:24:34",
       "consecutive_errors": 0,
       "last_error": null
