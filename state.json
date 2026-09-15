@@ -114,8 +114,8 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=92&i_strage=128": {
       "name": "iPhone 12 128GB（アウトレット）",
-      "status": "in_stock",
-      "since": "2026-09-15 11:44:59",
+      "status": "sold_out",
+      "since": "2026-09-15 11:45:57",
       "last_notified": "2026-09-15 11:45:00",
       "consecutive_errors": 0,
       "last_error": null
