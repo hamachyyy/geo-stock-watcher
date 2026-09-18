@@ -26,9 +26,9 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=128": {
       "name": "iPhone 11 128GB（アウトレット）",
-      "status": "sold_out",
-      "since": "2026-09-17 15:54:53",
-      "last_notified": "2026-09-17 15:53:51",
+      "status": "in_stock",
+      "since": "2026-09-18 10:07:53",
+      "last_notified": "2026-09-18 10:07:53",
       "consecutive_errors": 0,
       "last_error": null
     },
