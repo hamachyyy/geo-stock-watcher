@@ -250,9 +250,9 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=143&i_strage=": {
       "name": "Galaxy A25 5G（中古未使用品）",
-      "status": "sold_out",
-      "since": "2026-08-24 18:32:53",
-      "last_notified": null,
+      "status": "in_stock",
+      "since": "2026-09-24 12:09:35",
+      "last_notified": "2026-09-24 12:09:36",
       "consecutive_errors": 0,
       "last_error": null
     }
