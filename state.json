@@ -13,8 +13,8 @@
       "status": "sold_out",
       "since": "2026-09-02 10:41:49",
       "last_notified": "2026-09-01 20:09:32",
-      "consecutive_errors": 0,
-      "last_error": null
+      "consecutive_errors": 1,
+      "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=64": {
       "name": "iPhone 11 64GB（アウトレット）",
