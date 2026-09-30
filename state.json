@@ -5,7 +5,7 @@
       "status": "sold_out",
       "since": "2026-09-02 11:58:00",
       "last_notified": "2026-09-02 11:53:35",
-      "consecutive_errors": 2928,
+      "consecutive_errors": 2929,
       "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree": {
@@ -13,7 +13,7 @@
       "status": "sold_out",
       "since": "2026-09-02 10:41:49",
       "last_notified": "2026-09-01 20:09:32",
-      "consecutive_errors": 4220,
+      "consecutive_errors": 4221,
       "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=64": {
@@ -114,9 +114,9 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=92&i_strage=128": {
       "name": "iPhone 12 128GB（アウトレット）",
-      "status": "sold_out",
-      "since": "2026-09-15 11:45:57",
-      "last_notified": "2026-09-15 11:45:00",
+      "status": "in_stock",
+      "since": "2026-09-30 14:52:24",
+      "last_notified": "2026-09-30 14:52:25",
       "consecutive_errors": 0,
       "last_error": null
     },
