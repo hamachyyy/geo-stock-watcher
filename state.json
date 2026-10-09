@@ -5,7 +5,7 @@
       "status": "sold_out",
       "since": "2026-09-02 11:58:00",
       "last_notified": "2026-09-02 11:53:35",
-      "consecutive_errors": 12786,
+      "consecutive_errors": 12787,
       "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree": {
@@ -13,7 +13,7 @@
       "status": "sold_out",
       "since": "2026-09-02 10:41:49",
       "last_notified": "2026-09-01 20:09:32",
-      "consecutive_errors": 14078,
+      "consecutive_errors": 14079,
       "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=64": {
@@ -26,8 +26,8 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=128": {
       "name": "iPhone 11 128GB（アウトレット）",
-      "status": "in_stock",
-      "since": "2026-10-09 18:34:05",
+      "status": "sold_out",
+      "since": "2026-10-09 18:35:17",
       "last_notified": "2026-10-09 18:34:06",
       "consecutive_errors": 0,
       "last_error": null
