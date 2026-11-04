@@ -24,7 +24,11 @@ on:
       interval_seconds:
         description: 'チェック間隔の秒数（短いほど早く気づくが、403 で弾かれやすくなる）'
         type: string
-        default: '45'
+        default: '20'
+      chain:
+        description: '終わったら次の実行を自分で起こす（試し運転では外す）'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -56,7 +60,9 @@ jobs:
           REPO: ${{ github.repository }}
           MODE: ${{ inputs.mode || 'loop' }}
           LOOP_MINUTES: ${{ inputs.loop_minutes || '330' }}
-          INTERVAL_SECONDS: ${{ inputs.interval_seconds || '45' }}
+          INTERVAL_SECONDS: ${{ inputs.interval_seconds || '20' }}
+          # schedule から起きたときは inputs が空なので連鎖する
+          CHAIN: ${{ github.event_name != 'workflow_dispatch' || inputs.chain }}
         run: |
           set -uo pipefail
 
@@ -92,23 +98,48 @@ jobs:
               ;;
           esac
 
-          # 設定不備（通知先が未設定など）はここで落として気づけるようにする
-          python3 watcher.py --once --durable-state || exit $?
-          persist
+          # 60 秒より短い間隔では、落ちているページ（XR・SE2 の 500）を取り直さず 1 回の確認を短くする。
+          # 取り直していた頃は 1 回に 30 秒ほどかかり、45 秒の設定でも実際は約 78 秒おきだった（2026-11-04 実測）
+          FAST=""
+          if [ "$INTERVAL_SECONDS" -lt 60 ]; then
+            FAST="--fast"
+          fi
+          # 死活監視の ping は 1 分に 1 回で足りる（20 秒おきなら 3 回に 1 回）
+          HC_EVERY=$(( 60 / INTERVAL_SECONDS ))
+          if [ "$HC_EVERY" -lt 1 ]; then
+            HC_EVERY=1
+          fi
+          n=1
+          check_once() {
+            local hc=""
+            if [ $(( n % HC_EVERY )) -eq 0 ]; then
+              hc="${HEALTHCHECK_URL:-}"
+            fi
+            HEALTHCHECK_URL="$hc" python3 watcher.py --once --durable-state $FAST
+          }
 
           START_TS=$(date +%s)
+          LAST_START=$START_TS
+          # 設定不備（通知先が未設定など）はここで落として気づけるようにする
+          python3 watcher.py --once --durable-state $FAST || exit $?
+          persist
+
           END=$(( START_TS + LOOP_MINUTES * 60 ))
-          n=1
           while true; do
             REMAIN=$(( END - $(date +%s) ))
             if [ "$REMAIN" -lt "$INTERVAL_SECONDS" ]; then
               break
             fi
-            # 等間隔の連打は機械的で弾かれやすいため ±20% ゆらす
-            sleep $(( INTERVAL_SECONDS * (80 + RANDOM % 41) / 100 ))
+            # 「確認 → 残りの時間だけ待つ」で間隔を守る。等間隔の連打は機械的で弾かれやすいため ±10% ゆらす
+            TARGET=$(( INTERVAL_SECONDS * (90 + RANDOM % 21) / 100 ))
+            WAIT=$(( TARGET - ( $(date +%s) - LAST_START ) ))
+            if [ "$WAIT" -gt 0 ]; then
+              sleep "$WAIT"
+            fi
             n=$(( n + 1 ))
+            LAST_START=$(date +%s)
             # 一時的な取得失敗でループ全体を止めない
-            python3 watcher.py --once --durable-state || echo "この回は失敗（継続します）"
+            check_once || echo "この回は失敗（継続します）"
             persist
           done
           echo "ループ終了: ${n} 回チェックしました（約 ${LOOP_MINUTES} 分）"
@@ -122,7 +153,9 @@ jobs:
           # 失敗と再起動を延々と繰り返してしまうため。
           ELAPSED_MIN=$(( ( $(date +%s) - START_TS ) / 60 ))
           MIN_MIN=$(( LOOP_MINUTES * 8 / 10 ))
-          if [ -z "${DISPATCH_TOKEN:-}" ]; then
+          if [ "$CHAIN" != "true" ]; then
+            echo "試し運転のため次の実行は起こしません"
+          elif [ -z "${DISPATCH_TOKEN:-}" ]; then
             echo "DISPATCH_TOKEN 未設定のため次の実行は起こしません"
           elif [ "$ELAPSED_MIN" -lt "$MIN_MIN" ]; then
             echo "実行が短すぎます（${ELAPSED_MIN}分 < ${MIN_MIN}分）。暴走を避けるため連鎖しません"
@@ -130,7 +163,7 @@ jobs:
             CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
               -H "Authorization: Bearer $DISPATCH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              -d "{\"ref\":\"main\",\"inputs\":{\"mode\":\"loop\",\"loop_minutes\":\"${LOOP_MINUTES}\",\"interval_seconds\":\"${INTERVAL_SECONDS}\"}}" \
+              -d "{\"ref\":\"main\",\"inputs\":{\"mode\":\"loop\",\"loop_minutes\":\"${LOOP_MINUTES}\",\"interval_seconds\":\"${INTERVAL_SECONDS}\",\"chain\":true}}" \
               "https://api.github.com/repos/${REPO}/actions/workflows/watch.yml/dispatches" \
               || echo "000")
             if [ "$CODE" = "204" ]; then

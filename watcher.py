@@ -187,11 +187,13 @@ def save_json(path, data):
 
 # --------------------------------------------------------------------------- fetch
 
-def fetch(url, timeout=30, retries=3, follow_redirects=False):
+def fetch(url, timeout=30, retries=3, follow_redirects=False, retry_http=True, backoff=3):
     """curl でページを取得する。(html, error) を返す。
 
     follow_redirects=True のときは 3xx を追従する（注文フロー等、正規ページに
     到達する前に一旦別URLへ飛ばすサイト向け）。既定は追従しない。
+    retry_http=False のときは HTTP のエラー（落ちているページの 500 など）を取り直さない。
+    20 秒おきの確認では次がすぐ来るので、取り直しで 1 回の確認を長引かせない（通信の失敗だけ取り直す）。
     """
     last_err = None
     for attempt in range(1, retries + 1):
@@ -214,12 +216,14 @@ def fetch(url, timeout=30, retries=3, follow_redirects=False):
             if status == "200" and body:
                 return body, None
             last_err = "HTTP %s" % status
+            if not retry_http and status != "000":
+                break
         except subprocess.TimeoutExpired:
             last_err = "timeout"
         except Exception as e:  # noqa: BLE001
             last_err = str(e)
         if attempt < retries:
-            time.sleep(3 * attempt)
+            time.sleep(backoff * attempt)
     return None, last_err
 
 
@@ -503,6 +507,20 @@ def _update_entry(cfg, state, key, name, url, status, err, renotify_hours,
                 _send_restock(cfg, entry, name, url, repeat=True)
 
 
+class SiteBlocked(Exception):
+    """サイトにアクセスを断られた（HTTP 403）。休んで解けるのを待つ。"""
+
+
+BLOCK_REST_MINUTES = 15
+
+
+def _fetch_opts(cfg):
+    """20 秒おきの確認（--fast）では、取り直しを減らして 1 回の確認を短くする。"""
+    if cfg.get("_fast"):
+        return {"timeout": 15, "retries": 2, "retry_http": False, "backoff": 1}
+    return {}
+
+
 def _check_product_page(cfg, state, t, renotify_hours, force_notify):
     url = t["url"]
     name = t.get("name", url.rsplit("/", 1)[-1])
@@ -511,7 +529,9 @@ def _check_product_page(cfg, state, t, renotify_hours, force_notify):
     sold_out_markers = t.get("sold_out_markers")  # 対象別に上書き（無ければ既定）
     follow_redirects = bool(t.get("follow_redirects", False))
 
-    html, err = fetch(url, follow_redirects=follow_redirects)
+    html, err = fetch(url, follow_redirects=follow_redirects, **_fetch_opts(cfg))
+    if err == "HTTP 403":
+        raise SiteBlocked(url)
     if html is None:
         _update_entry(cfg, state, url, name, url, None, err, renotify_hours,
                       force_notify)
@@ -528,7 +548,9 @@ def _check_outlet_listing(cfg, state, t, renotify_hours, force_notify):
     meta_key = url  # ページ全体の取得・解析失敗を追跡する代表キー
     tstate = state.setdefault("targets", {})
 
-    html, err = fetch(url)
+    html, err = fetch(url, **_fetch_opts(cfg))
+    if err == "HTTP 403":
+        raise SiteBlocked(url)
     if html is None:
         _update_entry(cfg, state, meta_key, name, url, None, err, renotify_hours,
                       force_notify)
@@ -567,14 +589,44 @@ def check_all(cfg, state, force_notify=False):
     err_threshold = int(cfg.get("health_alert_after_errors", 6))
     health_cooldown = float(cfg.get("health_alert_cooldown_hours", 12))
 
-    for t in targets:
-        # アクセスの間隔を少しばらけさせる
-        time.sleep(random.uniform(0.5, 4.0))
+    fast = bool(cfg.get("_fast"))
 
-        if t.get("type") == "outlet_listing":
-            _check_outlet_listing(cfg, state, t, renotify_hours, force_notify)
-        else:
-            _check_product_page(cfg, state, t, renotify_hours, force_notify)
+    # アクセスを断られた（403）後は、休む時間が過ぎるまで見に行かない（叩き続けると止められる時間が延びる）。
+    # 休む時刻は state.json に残るので、次の実行（別のランナー）も同じだけ休む。IP や見かけを変えて回り込むことはしない
+    rest_until = parse_iso(state.get("blocked_until"))
+    if rest_until and now() < rest_until:
+        state["last_run"] = iso(now())
+        return state
+
+    blocked = False
+    for t in targets:
+        # アクセスの間隔を少しばらけさせる（20 秒おきの確認では短く）
+        time.sleep(random.uniform(0.3, 1.2) if fast else random.uniform(0.5, 4.0))
+
+        try:
+            if t.get("type") == "outlet_listing":
+                _check_outlet_listing(cfg, state, t, renotify_hours, force_notify)
+            else:
+                _check_product_page(cfg, state, t, renotify_hours, force_notify)
+        except SiteBlocked as e:
+            blocked = True
+            state["blocked_until"] = iso(now() + timedelta(minutes=BLOCK_REST_MINUTES))
+            log("アクセスを断られました（HTTP 403: %s）。%d 分休みます" % (e, BLOCK_REST_MINUTES), "WARN")
+            if not state.get("blocked_at"):
+                state["blocked_at"] = iso(now())
+                record_history({"event": "blocked", "url": str(e)})
+                notify_ntfy(cfg, "ゲオモバイルにアクセスを断られました",
+                            "HTTP 403（%s）。%d 分ずつ休んで、解けたら知らせます。その間は在庫を見られません。"
+                            % (e, BLOCK_REST_MINUTES), priority="high", tags="no_entry")
+            break
+    if not blocked and state.get("blocked_at"):
+        log("アクセスできるようになりました（%s から止められていた）" % state["blocked_at"])
+        record_history({"event": "unblocked", "since": state["blocked_at"]})
+        notify_ntfy(cfg, "ゲオモバイルにまたアクセスできます",
+                    "%s から止められていましたが、解けました。在庫の確認を続けます。" % state["blocked_at"],
+                    priority="default", tags="white_check_mark")
+        state.pop("blocked_at", None)
+        state.pop("blocked_until", None)
 
     _maybe_health_alert(cfg, state, err_threshold, health_cooldown)
 
@@ -753,12 +805,16 @@ def main():
     ap.add_argument("--reset", action="store_true", help="保存済みの状態を消す")
     ap.add_argument("--durable-state", action="store_true",
                     help="状態から最終チェック時刻を省く（CI で差分を出さないため）")
+    ap.add_argument("--fast", action="store_true",
+                    help="20 秒おきの確認用。落ちているページ（500 など）を取り直さず、待ちも短くする")
     args = ap.parse_args()
 
     cfg = load_config()
     if cfg is None:
         print("config.json が見つかりません: %s" % CONFIG_PATH, file=sys.stderr)
         return 1
+    if args.fast:
+        cfg["_fast"] = True
     if not (cfg.get("ntfy", {}) or {}).get("topic", "").strip():
         print("ntfy のトピックが未設定です。config.local.json か環境変数 NTFY_TOPIC "
               "で指定してください。", file=sys.stderr)
