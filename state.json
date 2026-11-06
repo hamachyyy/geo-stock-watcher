@@ -5,7 +5,7 @@
       "status": "sold_out",
       "since": "2026-09-02 11:58:00",
       "last_notified": "2026-09-02 11:53:35",
-      "consecutive_errors": 45563,
+      "consecutive_errors": 45564,
       "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree": {
@@ -13,7 +13,7 @@
       "status": "sold_out",
       "since": "2026-09-02 10:41:49",
       "last_notified": "2026-09-01 20:09:32",
-      "consecutive_errors": 46853,
+      "consecutive_errors": 46854,
       "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=64": {
@@ -82,9 +82,9 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=88&i_strage=64": {
       "name": "iPhone SE 第3世代 64GB（アウトレット）",
-      "status": "sold_out",
-      "since": "2026-11-06 11:21:33",
-      "last_notified": "2026-11-06 11:13:59",
+      "status": "in_stock",
+      "since": "2026-11-06 11:40:45",
+      "last_notified": "2026-11-06 11:40:46",
       "consecutive_errors": 0,
       "last_error": null
     },
