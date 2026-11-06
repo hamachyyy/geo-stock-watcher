@@ -5,7 +5,7 @@
       "status": "sold_out",
       "since": "2026-09-02 11:58:00",
       "last_notified": "2026-09-02 11:53:35",
-      "consecutive_errors": 45481,
+      "consecutive_errors": 45482,
       "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree": {
@@ -13,7 +13,7 @@
       "status": "sold_out",
       "since": "2026-09-02 10:41:49",
       "last_notified": "2026-09-01 20:09:32",
-      "consecutive_errors": 46771,
+      "consecutive_errors": 46772,
       "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=64": {
@@ -26,9 +26,9 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=60&i_strage=128": {
       "name": "iPhone 11 128GB（アウトレット）",
-      "status": "sold_out",
-      "since": "2026-11-05 17:56:49",
-      "last_notified": "2026-11-05 17:49:23",
+      "status": "in_stock",
+      "since": "2026-11-06 11:13:59",
+      "last_notified": "2026-11-06 11:13:59",
       "consecutive_errors": 0,
       "last_error": null
     },
@@ -82,17 +82,17 @@
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=88&i_strage=64": {
       "name": "iPhone SE 第3世代 64GB（アウトレット）",
-      "status": "sold_out",
-      "since": "2026-08-24 18:32:53",
-      "last_notified": null,
+      "status": "in_stock",
+      "since": "2026-11-06 11:13:59",
+      "last_notified": "2026-11-06 11:13:59",
       "consecutive_errors": 0,
       "last_error": null
     },
     "https://mvno.geo-mobile.jp/outlet/#i_device=88&i_strage=128": {
       "name": "iPhone SE 第3世代 128GB（アウトレット）",
-      "status": "sold_out",
-      "since": "2026-11-04 17:30:17",
-      "last_notified": "2026-11-04 17:29:02",
+      "status": "in_stock",
+      "since": "2026-11-06 11:13:59",
+      "last_notified": "2026-11-06 11:13:59",
       "consecutive_errors": 0,
       "last_error": null
     },
@@ -257,7 +257,5 @@
       "last_error": null
     }
   },
-  "last_health_alert": "2026-11-06 01:04:16",
-  "blocked_until": "2026-11-06 11:13:36",
-  "blocked_at": "2026-11-06 07:25:48"
+  "last_health_alert": "2026-11-06 01:04:16"
 }
