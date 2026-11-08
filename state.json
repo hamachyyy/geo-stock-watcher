@@ -5,7 +5,7 @@
       "status": "sold_out",
       "since": "2026-09-02 11:58:00",
       "last_notified": "2026-09-02 11:53:35",
-      "consecutive_errors": 48365,
+      "consecutive_errors": 48366,
       "last_error": "HTTP 500"
     },
     "https://mvno.geo-mobile.jp/uqmobile/smartphone/iPhoneSE2_simfree": {
@@ -257,5 +257,7 @@
       "last_error": null
     }
   },
-  "last_health_alert": "2026-11-08 13:29:24"
+  "last_health_alert": "2026-11-08 13:29:24",
+  "blocked_until": "2026-11-08 19:40:34",
+  "blocked_at": "2026-11-08 19:25:34"
 }
