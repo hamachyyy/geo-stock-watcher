@@ -257,5 +257,7 @@
       "last_error": null
     }
   },
-  "last_health_alert": "2026-11-10 01:57:30"
+  "last_health_alert": "2026-11-10 01:57:30",
+  "blocked_until": "2026-11-10 04:40:16",
+  "blocked_at": "2026-11-10 04:25:16"
 }
