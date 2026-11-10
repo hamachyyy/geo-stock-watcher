@@ -24,7 +24,7 @@ on:
       interval_seconds:
         description: 'チェック間隔の秒数（短いほど早く気づくが、403 で弾かれやすくなる）'
         type: string
-        default: '20'
+        default: '45'
       chain:
         description: '終わったら次の実行を自分で起こす（試し運転では外す）'
         type: boolean
@@ -60,7 +60,7 @@ jobs:
           REPO: ${{ github.repository }}
           MODE: ${{ inputs.mode || 'loop' }}
           LOOP_MINUTES: ${{ inputs.loop_minutes || '330' }}
-          INTERVAL_SECONDS: ${{ inputs.interval_seconds || '20' }}
+          INTERVAL_SECONDS: ${{ inputs.interval_seconds || '45' }}
           # schedule から起きたときは inputs が空なので連鎖する
           CHAIN: ${{ github.event_name != 'workflow_dispatch' || inputs.chain }}
         run: |
@@ -104,7 +104,7 @@ jobs:
           if [ "$INTERVAL_SECONDS" -lt 60 ]; then
             FAST="--fast"
           fi
-          # 死活監視の ping は 1 分に 1 回で足りる（20 秒おきなら 3 回に 1 回）
+          # 死活監視の ping は 1 分に 1 回で足りる（20 秒おきなら 3 回に 1 回。45 秒なら毎回）
           HC_EVERY=$(( 60 / INTERVAL_SECONDS ))
           if [ "$HC_EVERY" -lt 1 ]; then
             HC_EVERY=1
